@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Турнир по информатике ИТМ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#2f5a44">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Rubik:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="masthead"><div class="masthead-in"><span data-art="card" data-seed="7"></span><div class="lcd" id="lcd-title">Турнир по информатике ИТМ</div><span data-art="card" data-seed="31"></span><span data-art="gears"></span></div></header>
+<nav class="navbar" id="nav" hidden><div class="navbar-in" id="nav-in"></div></nav>
+<main><div class="deco deco-l" aria-hidden="true"><span data-art="cardv" data-seed="11"></span><span data-art="tube"></span><span data-art="res"></span><span data-art="meter"></span></div><div class="deco deco-r" aria-hidden="true"><span data-art="cardv" data-seed="23"></span><span data-art="res2"></span><span data-art="tube"></span><span data-art="cardv" data-seed="77"></span></div><div class="wrap" id="app"><div class="spin" aria-label="Загрузка"></div></div></main>
+<footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Иркутск · 2026</span></div></footer>
+
+<script src="config.js"></script>
+<script src="art.js"></script>
+<script src="mechanics.js"></script>
+<script src="demo-tasks.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+'use strict';
+const CFG = window.TOURNEY_CONFIG || {};
+const DEMO = !CFG.supabaseUrl || !CFG.supabaseKey;
+const TZ = 'Asia/Irkutsk';
+const LS_TOKEN = 'itm_tourney_token', LS_DONE = 'itm_tourney_done';
+const ls = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} },
+};
+const $app = document.getElementById('app');
+const { h, table, RENDER } = window.MECH;
+const add = (...xs) => $app.append(...xs.filter((x) => x != null && x !== false));
+
+const norm = (x) => String(x||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]/g,'');
+const fmtDate = (d) => new Date(d).toLocaleString('ru-RU', { timeZone: TZ, day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+const fmtMs = (ms) => { const s = Math.round(ms/1000); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); };
+const ERR = {
+  ALREADY: 'Участник с такими ФИО и группой уже проходил турнир. Повторная попытка невозможна.',
+  NOT_STARTED: 'Турнир ещё не начался.', ENDED: 'Турнир уже завершён.',
+  BAD_NAME: 'Введите фамилию и имя полностью (минимум два слова).', BAD_GROUP: 'Выберите группу из списка.',
+  NO_ATTEMPT: 'Попытка не найдена.', NO_TASKS: 'Банк заданий не загружен. Сообщите организатору.',
+};
+const errText = (e) => { const m = String(e && e.message || e); for (const k in ERR) if (m.includes(k)) return ERR[k]; return 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'; };
+
+// ================== API ==================
+let api;
+if (!DEMO) {
+  const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: false } });
+  const rpc = async (fn, args) => { const { data, error } = await sb.rpc(fn, args); if (error) throw new Error(error.message); return data; };
+  api = {
+    info: () => rpc('t_info', {}),
+    publicResults: () => rpc('t_public_results', {}),
+    top: () => rpc('t_public_top', {}),
+    start: (n, g) => rpc('t_start', { p_name: n, p_group: g, p_ua: navigator.userAgent }),
+    get: (t) => rpc('t_get', { p_token: t }),
+    answer: (t, i, a) => rpc('t_answer', { p_token: t, p_idx: i, p_answer: a }),
+  };
+} else {
+  // Демо: та же логика в памяти браузера
+  const PROF = { 'ТОРА':['auto','Техническое обслуживание и ремонт автотранспорта'],'МР':['auto','Мастер по ремонту и обслуживанию автомобилей'],'СР':['auto','Слесарь по ремонту автомобилей'],'СП':['weld','Сварочное производство'],'ЭС':['weld','Электросварщик'],'НП':['it','Наладчик аппаратных и программных средств'],'МС':['zhkh','Мастер ЖКХ'],'МШИ':['sew','Мастер по изготовлению швейных изделий'],'Ш':['sew','Швея'],'ПК':['cook','Повар, кондитер'],'П':['cook','Повар'] };
+  const GROUPS = [[1,'МР-261 МР-262 МС-26 МШИ-26 НП-26 ПК-26 СП-26 СР-261 СР-262 ТОРА-261 ТОРА-262 ТОРА-263 ТОРА-264 Ш-26 ЭС-26'],[2,'МР-251 МР-252 МС-25 НП-251 НП-252 П-25 СП-25 ТОРА-251 ТОРА-252 ЭС-25'],[3,'ТОРА-241 ТОРА-242'],[4,'СП-23 ТОРА-231 ТОРА-232']].flatMap(([c,l])=>l.split(' ').map(name=>({name,course:c})));
+  const T = window.DEMO_TASKS || [];
+  const rnd = (a) => a[Math.floor(Math.random()*a.length)];
+  const pickTpl = (list, n, key='tpl') => { const by = {}; list.forEach(v => (by[v[key]] = by[v[key]] || []).push(v)); return Object.values(by).map(rnd).sort(() => Math.random()-.5).slice(0, n); };
+  const DR=[-1,0,1,0], DC=[0,1,0,-1];
+  const robotOk = (c, p) => { if (!p || p.length > c.maxLen) return false; const g=c.grid; let r,cc,d=c.dir; g.forEach((row,i)=>{const j=row.indexOf('S'); if(j>=0){r=i;cc=j;}}); for (const ch of p){ if(ch==='L')d=(d+3)%4; else if(ch==='R')d=(d+1)%4; else { r+=DR[d]; cc+=DC[d]; if(r<0||r>=g.length||cc<0||cc>=g[0].length||g[r][cc]==='#')return false; if(g[r][cc]==='G')return true; } } return false; };
+  const check = (type, ans, sub) => { try {
+    if (sub == null) return false;
+    switch (type) {
+      case 'choice': return +sub === +ans;
+      case 'multi': case 'spot': case 'rows': return JSON.stringify([...new Set(sub)].sort((a,b)=>a-b)) === JSON.stringify(ans);
+      case 'order': case 'match': case 'graph': case 'bins': return JSON.stringify(sub) === JSON.stringify(ans);
+      case 'pixel': case 'logic': case 'bits': return sub === ans;
+      case 'number': return Math.abs(parseFloat(String(sub).replace(',','.').replace(/\s/g,'')) - ans.v) <= (ans.tol||0) + 1e-6;
+      case 'text': { const s = String(sub).replace(/\s/g,'').toLowerCase(); return ans.strip0 ? (s.replace(/^0+/,'')||'0') === (ans.v.replace(/^0+/,'')||'0') : s === ans.v.toLowerCase(); }
+      case 'robot': return robotOk(ans, sub);
+    } } catch(e){} return false; };
+  let A = null; const used = new Set(); const DONE = [];
+  const state = () => {
+    if (A.done) return { done:true, name:A.name, game_code:'ИТМ-' + String(Math.abs([...A.name].reduce((x,c)=>x*31+c.charCodeAt(0)|0,7)) % 1000000).padStart(6,'0').replace(/^(\d{4})(\d{2})$/,'$1-$2'), score:A.tasks.reduce((s,t)=>s+(t.earned||0),0), correct:A.tasks.filter(t=>t.ok).length, total:10, time_ms:A.tasks.reduce((s,t)=>s+(t.spent||0),0), max_score:200 };
+    const t = A.tasks[A.idx];
+    return { done:false, name:A.name, idx:A.idx, total:10, pool:t.pool, points:t.points, task:t.v.payload };
+  };
+  const advance = () => {};
+  api = {
+    info: async () => ({ title:'Турнир по информатике', starts_at:new Date(Date.now()-864e5).toISOString(), ends_at:new Date(Date.now()+6*864e5).toISOString(), now:new Date().toISOString(), groups:GROUPS }),
+    publicResults: async () => ({ open:false }),
+    top: async () => DONE.slice().sort((a,b)=>b.score-a.score),
+    start: async (n, g) => {
+      if (!/\S+\s+\S+/.test(n.trim())) throw new Error('BAD_NAME');
+      const teacher = norm(g) === 'преподаватель'; const grp = GROUPS.find(x=>norm(x.name)===norm(g));
+      if (!teacher && !grp) throw new Error('BAD_GROUP');
+      const sp = [null, null, teacher ? null : PROF[grp.name.split('-')[0]][0]];
+      const key = norm(n)+'|'+norm(g);
+      if (used.has(key)) throw new Error('ALREADY'); used.add(key);
+      const easy = pickTpl(T.filter(v=>v.pool==='easy'),3), boss = pickTpl(T.filter(v=>v.pool==='boss'),3);
+      const med = sp[2] ? pickTpl(T.filter(v=>v.pool==='medium'&&v.spec===sp[2]),4) : pickTpl(T.filter(v=>v.pool==='medium'),4,'spec');
+      const mk = (v,pool,limit,points)=>({v,pool,limit,points});
+      A = { name:n.trim(), group: teacher ? '' : grp.name, teacher, idx:0, done:false, tasks:[...easy.map(v=>mk(v,'easy',60,10)),...med.map(v=>mk(v,'medium',90,20)),...boss.map(v=>mk(v,'boss',120,30))] };
+      A.tasks[0].shown = Date.now();
+      return { token:'demo', ...state() };
+    },
+    get: async () => { if (!A) throw new Error('NO_ATTEMPT'); advance(); return state(); },
+    answer: async (tok, idx, ans) => {
+      advance();
+      if (!A.done && A.idx === idx) { const t = A.tasks[idx]; t.ok = check(t.v.type, t.v.answer, ans); t.earned = t.ok ? t.points : 0; t.spent = Date.now()-t.shown; A.idx++; if (A.idx>=10) { A.done=true; if (!A.teacher) DONE.push({ name:A.name, group:A.group, score:A.tasks.reduce((s,t)=>s+(t.earned||0),0) }); } else A.tasks[A.idx].shown = Date.now(); }
+      return state();
+    },
+  };
+}
+
+// ================== Экраны ==================
+let INFO = null, TOKEN = ls.get(LS_TOKEN), timer = null;
+function clear(){ if (timer) { clearInterval(timer); timer = null; } $app.replaceChildren(); $app.classList.remove('wide'); document.getElementById('nav').hidden = true; window.scrollTo(0,0); }
+function demoBanner(){ return DEMO ? h('div',{class:'banner'}, h('span',null,'Демо-режим: результаты не сохраняются.'), h('button',{onclick:()=>{ls.del(LS_TOKEN);ls.del(LS_DONE);TOKEN=null;showStart();}},'Начать заново')) : null; }
+function header(){ if (INFO) document.getElementById('lcd-title').textContent = INFO.title.replace(/ ИТМ$/,'') + ' ИТМ'; return null; }
+const ROBOT = ['......aa......','......dd......','..dddddddddd..','..dggggggggd..','..dgssssssgd..','..dgsessesgd..','..dgssssssgd..','..dgsmmmmsgd..','..dggggggggd..','..dddddddddd..','.....dddd.....','.dddddddddddd.','dgdggggggggdgd','dgdgkkkkkkgdgd','dgdgkokkokgdgd','dgdggggggggdgd','.d.dddddddd.d.','...dgd..dgd...','...dgd..dgd...','..dddd..dddd..'];
+const RCOL = { a:'#c2381f', d:'#4c5458', g:'#9aa6ab', s:'#a8dccd', e:'#22302c', m:'#22302c', k:'#0e1d13', o:'#86f29a' };
+function robotSvg(){
+  const NS='http://www.w3.org/2000/svg', svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox','0 0 14 20'); svg.setAttribute('class','robot'); svg.setAttribute('aria-hidden','true'); svg.setAttribute('shape-rendering','crispEdges');
+  ROBOT.forEach((row,y)=>[...row].forEach((c,x)=>{ if(c==='.') return; const r=document.createElementNS(NS,'rect'); r.setAttribute('x',x); r.setAttribute('y',y); r.setAttribute('width',1.02); r.setAttribute('height',1.02); r.setAttribute('fill',RCOL[c]); svg.append(r); }));
+  return svg;
+}
+function bitsDeco(){
+  const d = h('div',{class:'bits-deco'});
+  const rnd = () => Array.from({length:7},()=>Math.random()<.5?'0':'1').join('');
+  const rows = [rnd(), rnd(), rnd()];
+  const draw = () => d.replaceChildren(rows[0], h('br'), rows[1], h('br'), rows[2]);
+  draw();
+  if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { const iv = setInterval(() => { if (!d.isConnected) return clearInterval(iv); rows.shift(); rows.push(rnd()); draw(); }, 700); }
+  return d;
+}
+function resistorSvg(){ return ART.resistor(); }
+function _oldRes(){ const d=document.createElement('div'); d.innerHTML='<svg class="resistor" viewBox="0 0 120 24" aria-hidden="true"><line x1="0" y1="12" x2="120" y2="12" stroke="#7d7660" stroke-width="3"/><rect x="38" y="4" width="44" height="16" rx="7" fill="#d9a46c" stroke="#7a5530" stroke-width="1.5"/><rect x="46" y="4" width="4" height="16" fill="#7a3b1c"/><rect x="56" y="4" width="4" height="16" fill="#1c1c1c"/><rect x="66" y="4" width="4" height="16" fill="#c2381f"/><rect x="74" y="4" width="3" height="16" fill="#c9a227"/></svg>'; return d.firstChild; }
+function fmtLeft(ms){ const s=Math.max(0,Math.floor(ms/1000)), d=Math.floor(s/86400), hh=String(Math.floor(s%86400/3600)).padStart(2,'0'), mm=String(Math.floor(s%3600/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0'); return (d? d+'д ' : '') + hh+':'+mm+':'+ss; }
+const shortName = (n) => { const p = String(n).split(' '); return p[0] + (p[1] ? ' ' + p[1][0] + '.' : ''); };
+
+function showError(msg, retry){
+  clear();
+  add(header(), h('div',{class:'sheet'}, h('p',{class:'err'},msg), retry ? h('button',{class:'btn',onclick:retry},'Повторить') : null));
+}
+
+async function boot(){
+  try { INFO = await api.info(); } catch(e){ return showError(errText(e), boot); }
+  const now = new Date(INFO.now).getTime();
+  if (TOKEN && !DEMO) { try { const st = await api.get(TOKEN); return st.done ? showDone(st) : showTask(st); } catch(e){ if (!String(e.message).includes('NO_ATTEMPT')) return showError(errText(e), boot); ls.del(LS_TOKEN); TOKEN=null; } }
+  const done = ls.get(LS_DONE);
+  if (done && !DEMO) { try { return showDone(JSON.parse(done)); } catch(e){} }
+  if (now < new Date(INFO.starts_at).getTime()) return showClosed(false);
+  if (now > new Date(INFO.ends_at).getTime()) return showClosed(true);
+  showStart();
+}
+
+function showClosed(ended){
+  clear();
+  const box = h('div',{class:'sheet'});
+  add(header(), box);
+  if (!ended) { box.append(h('h2',null,'Турнир ещё не начался'), h('p',null,'Старт: ', h('b',null, fmtDate(INFO.starts_at))), h('p',{class:'muted small'},'Финиш: ' + fmtDate(INFO.ends_at))); return; }
+  box.append(h('h2',null,'Турнир завершён'), h('div',{class:'spin'}));
+  api.publicResults().then(res => {
+    box.querySelector('.spin').remove();
+    if (!res.open || !res.rows.length) { box.append(h('p',{class:'muted'},'Итоги скоро будут объявлены.')); return; }
+    renderWinners(box, res.rows);
+  }).catch(()=>{ box.querySelector('.spin')?.remove(); box.append(h('p',{class:'muted'},'Не удалось загрузить итоги.')); });
+}
+function renderWinners(box, rows){
+  const specName = (c) => c;
+  const st = rows.filter(r=>!r.teacher), te = rows.filter(r=>r.teacher);
+  const w = (label, r) => r ? h('div',{class:'winner'}, h('span',{class:'eyebrow'},label), h('b',null,r.name), h('span',{class:'small muted'}, (r.teacher?'':r.group+' · ') + r.score + ' баллов')) : null;
+  box.append(w('Лучший студент', st[0]), w('Лучший преподаватель', te[0]));
+  const specs = [...new Set(st.map(r=>r.specialty))];
+  if (specs.length) { box.append(h('h3',{style:'margin-top:8px'},'Зачёт по специальностям')); specs.forEach(s => box.append(w(specName(s), st.find(r=>r.specialty===s)))); }
+}
+
+let HOME_TAB = 'home';
+function showStart(tab){
+  clear(); header();
+  if (tab) HOME_TAB = tab;
+  $app.classList.add('wide');
+  const nav = document.getElementById('nav'), navIn = document.getElementById('nav-in');
+  nav.hidden = false;
+  navIn.replaceChildren(...[['home','Главная'],['rules','Правила'],['rating','Рейтинг']].map(([k,l])=>h('button',{class:'key',type:'button','aria-pressed':String(HOME_TAB===k),onclick:()=>showStart(k)},l)));
+  const offset = Date.now() - new Date(INFO.now).getTime();
+  const groups = INFO.groups || [];
+
+  // --- форма входа ---
+  const name = h('input',{class:'t',id:'f-name',autocomplete:'name',placeholder:'Иванов Иван Иванович',maxlength:'120'});
+  const group = h('input',{class:'t',id:'f-group',placeholder:'Начните вводить, например ТОРА',maxlength:'40',autocomplete:'off',autocapitalize:'characters',spellcheck:'false'});
+  const sug = h('div',{class:'gsug'});
+  const err = h('p',{class:'err',hidden:true});
+  const resolve = (v) => norm(v) === 'преподаватель' ? 'Преподаватель' : (groups.find(g=>norm(g.name)===norm(v))||{}).name;
+  const drawSug = () => {
+    const q = norm(group.value);
+    if (resolve(group.value)) { sug.replaceChildren(h('span',{class:'gok'},'✓ ', resolve(group.value))); return; }
+    const list = groups.filter(g => !q || norm(g.name).includes(q));
+    if (!list.length) { sug.replaceChildren(h('span',{class:'hint'},'Такой группы нет в списке.')); return; }
+    const by = {}; list.forEach(g => (by[g.course] = by[g.course] || []).push(g));
+    sug.replaceChildren(...Object.keys(by).map(c => h('div',{class:'gcourse'}, h('span',{class:'gc'}, c + ' курс'),
+      h('div',{class:'gchips'}, ...by[c].map(g => h('button',{type:'button',class:'gchip',onclick:()=>{ group.value = g.name; drawSug(); err.hidden = true; }}, g.name))))));
+  };
+  group.addEventListener('input', drawSug); drawSug();
+  const form = h('form',{class:'sheet',novalidate:true,id:'login',hidden:true},
+    h('h2',null,'Регистрация участника'),
+    h('label',{class:'f'},'Фамилия, имя, отчество', name),
+    h('label',{class:'f'},'Группа', group), sug, err,
+    h('button',{class:'btn',type:'submit'},'Начать турнир'));
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault(); err.hidden = true;
+    const n = name.value.trim().replace(/\s+/g,' '), g = resolve(group.value);
+    const fail = (m) => { err.textContent = m; err.hidden = false; };
+    if (!/^\S+\s+\S+/.test(n) || n.length < 5) return fail(ERR.BAD_NAME);
+    if (!g) return fail(ERR.BAD_GROUP);
+    confirmStart(n, g);
+  });
+  const openForm = () => { form.hidden = false; form.scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>name.focus({preventScroll:true}), 300); };
+
+  // --- правая колонка: табло и топ ---
+  const lcd = h('div',{class:'lcd'});
+  const tick = () => { const now = Date.now() - offset, st = new Date(INFO.starts_at).getTime(), en = new Date(INFO.ends_at).getTime();
+    const left = Math.max(0, Math.floor(((now < st ? st : en) - now) / 1000)), p2 = (x) => String(x).padStart(2,'0');
+    lcd.replaceChildren(h('small',null, now < st ? 'До старта турнира' : 'До конца турнира'), ART.sevenSeg([[p2(Math.min(99,Math.floor(left/86400))),'дн'],[p2(Math.floor(left%86400/3600)),'час'],[p2(Math.floor(left%3600/60)),'мин'],[p2(left%60),'сек']])); };
+  tick(); timer = setInterval(tick, 1000);
+  const board = h('tbody',null, h('tr',null,h('td',{colspan:'3',class:'muted'},'Загрузка…')));
+  const printout = (title, limit) => {
+    const tb = h('tbody',null, h('tr',null,h('td',{colspan:'4',class:'muted'},'Загрузка…')));
+    api.top().then(rows => {
+      rows = rows.slice(0, limit);
+      tb.replaceChildren(...(rows.length ? rows.map((r,i)=>h('tr',null, h('td',{class:'n'},String(i+1)), h('td',null, shortName(r.name), h('div',{class:'small muted'}, r.group)), h('td',{class:'n'},String(r.score)))) : [h('tr',null,h('td',{colspan:'3',class:'muted'},'Пока пусто. Будь первым!'))]));
+    }).catch(()=>tb.replaceChildren(h('tr',null,h('td',{colspan:'3',class:'muted'},'Нет связи с сервером.'))));
+    return h('div',{class:'printout'}, h('h3',null,title), h('table',{class:'board'}, h('thead',null,h('tr',null,h('th',{class:'n'},'#'),h('th',null,'Участник'),h('th',{class:'n'},'Баллы'))), tb), h('div',{class:'barcode','aria-hidden':'true'}));
+  };
+  const side = h('div',{class:'col side'}, h('div',{class:'countdown screws'}, lcd), printout('Топ-5 студентов', 5));
+
+  const levels = h('div',{class:'levels'},
+    h('div',null,h('b',null,'3 × 10'),h('small',null,'⭐ разминка')),
+    h('div',null,h('b',null,'4 × 20'),h('small',null,'⭐⭐ по профессии')),
+    h('div',null,h('b',null,'3 × 30'),h('small',null,'⭐⭐⭐ «Босс»')));
+  const rules = h('div',{class:'sheet'}, h('h2',null,'Правила'), levels,
+    h('ul',{class:'rules'},
+      h('li',null,'10 заданий, максимум 200 баллов. Время не ограничено.'),
+      h('li',null,'Вернуться к прошлому заданию нельзя.'),
+      h('li',null,h('b',null,'Попытка одна.'),' Если закрыли страницу — откройте её снова на этом же телефоне и продолжите.'),
+      h('li',null,'При равных баллах выше тот, кто решил быстрее.'),
+      h('li',null,'Итоги — после ' + fmtDate(INFO.ends_at) + ' (время иркутское).')),
+    h('button',{class:'btn',type:'button',onclick:()=>{ showStart('home'); setTimeout(()=>document.querySelector('#login') && (document.querySelector('#login').hidden=false, document.getElementById('f-name').focus()), 50); }},'Войти в турнир'));
+
+  const topic = (cls, title, icon, text) => h('div',{class:'topic '+cls}, h('div',{class:'tbar'}, h('h3',null,title), icon), h('p',null,text));
+  const svgIcon = (inner) => { const d=document.createElement('div'); d.innerHTML='<svg width="48" height="34" viewBox="0 0 48 34" aria-hidden="true">'+inner+'</svg>'; return d.firstChild; };
+  const topics = h('div',{class:'topics'},
+    topic('t-alg','Алгоритмы', svgIcon('<g fill="none" stroke="#fff" stroke-width="2"><rect x="18" y="2" width="12" height="7"/><path d="M24 9v5M24 14l-8 5 8 5 8-5z"/><path d="M16 19H8v8M32 19h8v8"/><rect x="3" y="27" width="10" height="6"/><rect x="35" y="27" width="10" height="6"/></g>'), 'Программа для робота, порядок действий, кратчайший маршрут.'),
+    topic('t-log','Логика', svgIcon('<g fill="none" stroke="#fff" stroke-width="2"><path d="M4 8h10M4 26h10M14 3h8a14 14 0 0 1 0 28h-8z"/><path d="M36 17h10"/><circle cx="39" cy="17" r="0"/></g><text x="4" y="20" fill="#fff" font-size="8" font-family="monospace">1 0</text>'), 'Логические схемы, условия И / ИЛИ / НЕ, фильтры в таблицах.'),
+    topic('t-cod','Кодирование', bitsDeco(), 'Двоичный код, пиксельные узоры, сжатие и единицы информации.'));
+
+  const hero = h('div',{class:'screen'}, h('div',{class:'glass'}, ART.robot(), h('div',{class:'hero-txt'},
+    h('h1',null,'Добро пожаловать, участники!'),
+    h('p',{style:'margin:0;text-transform:uppercase;letter-spacing:.04em'},'Проявите знания информатики в задачах по своей профессии.'),
+    h('button',{class:'btn',type:'button',style:'max-width:320px',onclick:openForm},'Войти в турнир'))));
+
+  let mainCol;
+  if (HOME_TAB === 'rules') mainCol = h('div',{class:'col'}, rules);
+  else if (HOME_TAB === 'rating') mainCol = h('div',{class:'col'}, printout('Рейтинг студентов', 20), h('p',{class:'small muted',style:'margin:0'},'Рейтинг обновляется, когда вы открываете вкладку. Победителей объявим после ' + fmtDate(INFO.ends_at) + '.'));
+  else mainCol = h('div',{class:'col'}, demoBanner(), hero, form, topics);
+  add(h('div',{class:'home'}, mainCol, side));
+}
+
+function confirmStart(n, g){
+  const err = h('p',{class:'err',hidden:true});
+  const yes = h('button',{class:'btn'},'Да, начать');
+  const no = h('button',{class:'btn ghost'},'Отмена');
+  const m = h('div',{class:'modal',role:'dialog','aria-modal':'true'}, h('div',{class:'sheet'},
+    h('h2',null,'Проверьте данные'),
+    h('dl',{class:'kv'}, h('dt',null,'ФИО'), h('dd',null,n), h('dt',null,'Группа'), h('dd',null,g)),
+    h('p',{class:'small muted',style:'margin:0'},'Исправить данные после старта нельзя.'),
+    err, h('div',{class:'row2'}, no, yes)));
+  no.onclick = () => m.remove();
+  yes.onclick = async () => {
+    yes.disabled = no.disabled = true; yes.textContent = 'Запуск…';
+    try {
+      const st = await api.start(n, g);
+      TOKEN = st.token; ls.set(LS_TOKEN, TOKEN); m.remove(); showTask(st);
+    } catch(e){ err.textContent = errText(e); err.hidden = false; yes.disabled = no.disabled = false; yes.textContent = 'Да, начать'; }
+  };
+  document.body.append(m); yes.focus();
+}
+
+// ================== Задание ==================
+function showTask(st){
+  clear();
+  const t = st.task, d = t.data || {};
+  const R = RENDER[t.type] ? RENDER[t.type](d) : RENDER.choice(d);
+  const send = h('button',{class:'btn',disabled:true},'Ответить');
+  let sent = false;
+  const steps = h('div',{class:'steps','aria-hidden':'true'}, ...Array.from({length:st.total},(_,i)=>h('i',{class: i<st.idx?'done':i===st.idx?'cur':''})));
+  const submit = async () => {
+    if (sent) return; sent = true; send.disabled = true; send.textContent = 'Отправка…';
+    const ans = R.value();
+    for (let i = 0; i < 3; i++) {
+      try {
+        const next = await api.answer(TOKEN, st.idx, ans);
+        flash('Ответ принят');
+        return next.done ? finish(next) : showTask(next);
+      } catch(e){ await new Promise(r=>setTimeout(r, 800)); }
+    }
+    showError(errText('net'), async () => { try { const s2 = await api.get(TOKEN); s2.done ? finish(s2) : showTask(s2); } catch(e){ showError(errText(e), boot); } });
+  };
+  R.onchange = () => { if (!sent) send.disabled = !R.ready(); };
+  send.onclick = submit;
+  const stars = st.pool==='easy'?'⭐':st.pool==='medium'?'⭐⭐':'⭐⭐⭐';
+  add(
+    h('div',{class:'topbar'},
+      h('div',{class:'toprow'}, h('span',{class:'eyebrow'},`Задание ${st.idx+1} из ${st.total}`), h('span',{class:'pts'+(st.pool==='boss'?' boss':'')}, `${stars} ${st.points}`)),
+      steps),
+    demoBanner(),
+    h('div',{class:'sheet task screws'},
+      h('div',{class:'tasktitle'}, t.title),
+      h('div',{class:'task-text'}, t.text),
+      typeof d.code === 'string' ? h('pre',{class:'code'}, d.code) : null,
+      d.table && t.type !== 'rows' ? table(d.table) : null,
+      R.el,
+      d.hint ? h('div',{class:'hint'},'Подсказка: ', d.hint) : null,
+      send),
+    h('p',{class:'small muted center'}, st.name));
+}
+
+function flash(text){ const f = h('div',{class:'flash'},text); document.body.append(f); setTimeout(()=>f.remove(), 800); }
+function finish(st){ ls.del(LS_TOKEN); ls.set(LS_DONE, JSON.stringify(st)); showDone(st); }
+
+function gameCodeCard(code){
+  const msg = h('span',{class:'small muted'});
+  const copy = h('button',{class:'btn ghost',type:'button',onclick:()=>{ try { navigator.clipboard.writeText(code).then(()=>{ msg.textContent='Скопировано'; }, ()=>{ msg.textContent='Выделите код и скопируйте вручную'; }); } catch(e){ msg.textContent='Выделите код и скопируйте вручную'; } }},'Скопировать код');
+  return h('div',{class:'sheet screws gamecode'},
+    h('div',{class:'eyebrow'},'Ваш билет в игру'),
+    h('h2',null,'Захват сети ИТМ'),
+    h('p',{style:'margin:0'},'Олимпиада — только начало. Всю неделю группы сражаются за сеть техникума. Чем больше баллов вы набрали, тем больше стартовой энергии.'),
+    h('div',{class:'gc-code',tabindex:'0'}, code),
+    h('div',{class:'row2'}, copy, h('a',{class:'btn',href:'game.html#'+encodeURIComponent(code),style:'text-align:center;text-decoration:none'},'Войти в игру')), msg);
+}
+function showDone(st){
+  clear();
+  add(header(), demoBanner(), h('div',{class:'sheet'},
+    h('div',{class:'eyebrow'},'Попытка засчитана'),
+    h('h2',null, st.name),
+    h('div',{class:'score'}, String(st.score), h('small',null,'из ' + (st.max_score||200) + ' баллов')),
+    h('dl',{class:'kv'}, h('dt',null,'Решено верно'), h('dd',null, `${st.correct} из ${st.total}`)),
+    h('p',{class:'small muted',style:'margin:0'}, INFO ? 'Итоги и победителей объявим после ' + fmtDate(INFO.ends_at) + '. Правильные ответы не показываем до конца турнира.' : '')),
+    st.game_code ? gameCodeCard(st.game_code) : null);
+}
+
+// ================== Механики ==================
+
+
+// иллюстрации в рамке страницы
+document.querySelectorAll('[data-art]').forEach(n => {
+  const k = n.dataset.art, seed = +n.dataset.seed || 1;
+  n.replaceWith(k==='card' ? ART.punchCard(seed) : k==='cardv' ? ART.punchCard(seed, true) : k==='tube' ? ART.tube() : k==='gears' ? ART.gears() : k==='res2' ? ART.resistor(['#c9a227','#6a3fa0','#1c1c1c','#b9b9b9']) : k==='meter' ? ART.meter() : k==='leds' ? ART.leds(5) : ART.resistor());
+});
+boot();
+})();
+</script>
+</body>
+</html>
