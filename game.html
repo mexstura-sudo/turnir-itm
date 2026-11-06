@@ -125,7 +125,8 @@ details.event[open]>summary{margin-bottom:4px}
 .st-n{font:700 .85rem var(--font-mono);color:var(--muted)}
 .st-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-name small{color:var(--muted);font-weight:400}
-@media (max-width:480px){.st-name small{display:none}}
+.st-name .st-day{display:block;font-size:.74rem;color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums}
+@media (max-width:480px){.st-name small:not(.st-day){display:none}}
 .st-bar{height:10px;background:var(--cell);border-radius:3px;overflow:hidden}
 .st-bar i{display:block;height:100%}
 .st-s{text-align:right;font:700 .95rem var(--font-mono)}

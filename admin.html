@@ -304,10 +304,14 @@ function gameView(){
   const G = DATA.gstate; if (!G) return h('p',{class:'muted'},'Нет данных игры.');
   const st = G.standings || [], top = G.top || [];
   return h('div',{style:'display:flex;flex-direction:column;gap:14px'},
-    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Очки — сколько команда приносит сейчас (узлы, связанные с базой, + бонус за цеха).'),
+    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Каждую полночь счёт команды записывается в копилку; итог недели — копилка + счёт сегодняшнего дня.'),
     h('div',{class:'tbl'}, h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Очки'),h('th',null,'Узлов'),h('th',null,'Игроков'))),
-      h('tbody',null, ...st.map((r,i)=>h('tr',{class:i<3&&r.score>0?'top':''}, h('td',{class:'place'},String(i+1)), h('td',null,r.team), h('td',{class:'num'},String(r.score)), h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players))))))),
+      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Итог'),...[1,2,3,4,5].map(d=>h('th',{title:'День '+d},'Д'+d)),h('th',null,'Узлов'),h('th',null,'Игроков'))),
+      h('tbody',null, ...st.map((r,i)=>{ const days = r.days || [], today = G.settings.today || 0, total = r.total ?? r.score ?? 0, now = r.today ?? r.score ?? 0;
+        return h('tr',{class:i<3&&total>0?'top':''}, h('td',{class:'place'},String(i+1)), h('td',null,r.team), h('td',{class:'num'},h('b',null,String(total))),
+          ...[1,2,3,4,5].map(d => h('td',{class:'num small'+(d===today?'':' muted')}, d < today ? String(days[d-1] ?? 0) : d === today ? String(now) + ' ·' : '—')),
+          h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players))); })))),
+    h('p',{class:'small muted',style:'margin:0'},'Д1–Д5 — счёт, записанный за каждый день; «·» — сегодняшний день, счёт ещё меняется.'),
     h('div',{class:'tbl'}, h('h2',null,'Лучшие взломщики'), top.length ? h('table',null,
       h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Игрок'),h('th',null,'Команда'),h('th',null,'Захватов'))),
       h('tbody',null, ...top.map((r,i)=>h('tr',null, h('td',{class:'place'},String(i+1)), h('td',null,r.name), h('td',null,r.team), h('td',{class:'num'},String(r.captures))))))

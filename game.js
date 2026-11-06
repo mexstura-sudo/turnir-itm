@@ -207,6 +207,7 @@
   // утро нового дня: событие переворачивает поле, появляется горячая точка
   function dayFlip(L, day) {
     const ev = DAYS[day], out = { day, hit: [], lines: [] };
+    if (L.yday && G.me) out.lines.push(`В копилку за вчера: +${L.yday[G.me.team] || 0} очк. (всего ${(L.banked && L.banked[G.me.team]) || 0})`);
     if (ev.flip === 'blackout') { L.nodes.forEach((n) => { if (n.region === ev.region && n.kind !== 'base' && (n.owner != null || n.shield)) { n.owner = null; n.shield = 0; out.hit.push(n.id); } }); out.lines.push(`Освобождено узлов в Серверной: ${out.hit.length}`); }
     if (ev.flip === 'doors') { const r = rewireDoors(L); out.hit = r.hit; out.lines.push(`Заложено проёмов: ${r.closed}, прорублено новых: ${r.opened}`); }
     if (ev.flip === 'leaders') { L.leaders = standings(L).slice(0, 3).map((r) => r.i); L.nodes.forEach((n) => { if (L.leaders.includes(n.owner) && n.shield) { n.shield = 0; out.hit.push(n.id); } }); out.lines.push('Под прожектором: ' + L.leaders.map((t) => L.teams[t].name).join(', ')); }
@@ -215,6 +216,8 @@
     L.hot = hotNode(L, day);
     return out;
   }
+  // полночь: записать счёт дня в копилку
+  function bankDay(L) { const ev = evOf(G); L.banked = L.banked || {}; L.yday = {}; L.teams.forEach((_, t) => { const v = score(L, t, ev); L.yday[t] = v; L.banked[t] = (L.banked[t] || 0) + v; }); }
   // ход времени: каждые 2 часа (в чётные часы) +1 ⚡, соперники действуют; в полночь — новый день
   function advance(mins) {
     const L = G.L, me = G.me; let brief = null, gained = 0;
@@ -227,7 +230,7 @@
       }
       if (G.clock >= 1440) {
         G.clock -= 1440;
-        if (G.day < LAST_DAY) { const before = score(L, me.team, evOf(G)); G.day++; brief = dayFlip(L, G.day); brief.before = before; brief.after = score(L, me.team, evOf(G)); }
+        if (G.day < LAST_DAY) { const before = score(L, me.team, evOf(G)); bankDay(L); G.day++; brief = dayFlip(L, G.day); brief.before = before; brief.after = score(L, me.team, evOf(G)); }
       }
       if (G.day === LAST_DAY && G.clock >= END_MIN) { G.clock = END_MIN; G.over = true; }
     }
@@ -318,6 +321,7 @@
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
     st.nodes.forEach(([id, owner, shield]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; } });
     L.hot = st.hot; L.leaders = st.leaders || [];
+    L.banked = {}; Object.entries(st.banked || {}).forEach(([t, v]) => { L.banked[t] = +v; }); L.yday = {}; Object.entries(st.yday || {}).forEach(([t, v]) => { L.yday[t] = +v; });
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
     G.top = st.top || [];
     const fresh = [];
@@ -346,7 +350,8 @@
   function maybeBrief() {
     if (!G.live || !G.day) return;
     const k = 'zs_brief_' + G.code; if (+(store.get(k) || 0) >= G.day) return;
-    store.set(k, String(G.day)); showBrief({ day: G.day, hit: [], lines: [] });
+    store.set(k, String(G.day)); const t = G.me.team, y = G.L.yday && G.L.yday[t];
+    showBrief({ day: G.day, hit: [], lines: y != null ? [`В копилку за вчера: +${y} очк. (всего ${(G.L.banked && G.L.banked[t]) || 0})`] : [] });
   }
   function netArt() { const s = sv('svg', { viewBox: '0 0 160 110', class: 'net-art', 'aria-hidden': 'true' }); const P = [[20, 20], [70, 14], [128, 26], [40, 60], [94, 56], [140, 80], [20, 96], [78, 98]]; [[0, 1], [1, 2], [0, 3], [1, 4], [2, 4], [3, 4], [4, 5], [3, 6], [6, 7], [4, 7], [5, 7]].forEach(([a, b]) => s.append(sv('line', { x1: P[a][0], y1: P[a][1], x2: P[b][0], y2: P[b][1], stroke: '#8f8668', 'stroke-width': 2 }))); const C = ['#c2381f', '#20406a', '#2f8a46', '#c2381f', '#ec6a1c', '#20406a', '#2f8a46', '#e9dfc0']; P.forEach(([x, y], i) => { const c = sv('circle', { cx: x, cy: y, r: i === 4 ? 10 : 7, fill: C[i], stroke: '#2b2a22', 'stroke-width': 2, class: 'na-n' }); c.style.animationDelay = (i * 0.4) + 's'; s.append(c); }); return s; }
   function rulesSheet() {
@@ -358,7 +363,7 @@
         h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. Задача сложнее, при 2+ щитах — «босс».')),
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты.')),
         h('div', null, h('b', null, '🔗 Связь'), h('p', null, 'Узлы, отрезанные от базы, не приносят очков. Между цехами кабели идут только через двери.')),
-        h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5. Больше половины цеха — ещё +10.')),
+        h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5, больше половины цеха — +10. Каждую полночь счёт команды записывается в копилку: итог недели — сумма всех пяти дней.')),
         h('div', null, h('b', null, '🔥 Горячая точка'), h('p', null, 'Каждый день один узел горит: пока он ваш, он приносит +10 очков.')),
         h('div', null, h('b', null, '📅 5 дней'), h('p', null, `С ${dayDate(1).text} по ${atIrk(gEnd()).text}. Каждую полночь — событие, которое переворачивает поле. Итоги — ${finalText(0)}.`))),
       h('p', { class: 'small muted', style: 'margin:0' }, 'Ошибка во взломе сжигает потраченную энергию. Студенты играют за свои группы, преподаватели — общей командой «Преподаватели» с базой в Учительской.'));
@@ -838,15 +843,16 @@
   }
 
   // ---------- рейтинг, журнал, итоги ----------
-  function standings(L) { const ev = evOf(G); return L.teams.map((t, i) => ({ t, i, s: score(L, i, ev), nodes: connected(L, i).size - 1 })).sort((a, b) => b.s - a.s || b.nodes - a.nodes); }
+  // итог недели = копилка (счёт, записанный в каждую полночь) + счёт сегодняшнего дня
+  function standings(L) { const ev = evOf(G); return L.teams.map((t, i) => { const live = score(L, i, ev), bank = (L.banked && L.banked[i]) || 0; return { t, i, live, bank, s: bank + live, nodes: connected(L, i).size - 1 }; }).sort((a, b) => b.s - a.s || b.live - a.live || b.nodes - a.nodes); }
   function rankView(L) {
     const rows = standings(L), max = Math.max(1, rows[0].s);
     const hk = G.live ? (G.top || []).map(([who, t, v]) => ({ who, t, v })) : Object.entries(L.hackers).map(([k, v]) => { const [who, t] = k.split('|'); return { who, t: +t, v }; }).filter((x) => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8);
     return h('div', { class: 'rank' },
-      h('section', { class: 'sheet' }, h('h2', null, 'Рейтинг команд'),
+      h('section', { class: 'sheet' }, h('h2', null, 'Рейтинг команд'), h('p', { class: 'small muted', style: 'margin:0' }, G.day > 1 ? 'Итог недели: каждую полночь счёт команды записывается в копилку. Под названием: копилка + счёт сегодня.' : 'Итог недели: каждую полночь счёт команды записывается в копилку, к ней прибавляется счёт следующих дней.'),
         h('ol', { class: 'standings' }, ...rows.map((r, k) => h('li', { class: (r.i === G.me.team ? 'me' : '') + (r.t.teach ? ' teach' : '') },
           h('span', { class: 'st-n' }, String(k + 1)), h('span', { class: 'swatch', style: `background:${r.t.color}` }),
-          h('span', { class: 'st-name' }, r.t.name, h('small', null, r.t.teach ? ` · ${r.t.members} преп.` : ` · ${r.t.members} уч.`)),
+          h('span', { class: 'st-name' }, r.t.name, h('small', null, r.t.teach ? ` · ${r.t.members} преп.` : ` · ${r.t.members} уч.`), G.day > 1 ? h('small', { class: 'st-day', title: 'копилка прошлых дней + счёт сегодня' }, `${r.bank} + ${r.live} сегодня`) : null),
           h('span', { class: 'st-bar' }, h('i', { style: `width:${Math.round(r.s / max * 100)}%;background:${r.t.color}` })),
           h('span', { class: 'st-s' }, String(r.s)))))),
       h('section', { class: 'printout' }, h('h3', null, 'Лучшие взломщики'),
@@ -884,7 +890,7 @@
     const m = h('div', { class: 'modal brief-modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'sheet brief screws' },
       h('span', { class: 'eyebrow' }, `День ${b.day} из ${LAST_DAY} · ${dayDate(b.day).wd}, ${dayDate(b.day).text}`),
       h('h2', null, ev.t), h('p', { style: 'margin:0' }, evText(ev, b.day)),
-      b.lines.length || b.before != null ? h('div', { class: 'brief-box' }, h('b', null, 'Что изменилось на поле'), h('ul', null, ...b.lines.map((x) => h('li', null, x)), b.before != null ? h('li', null, 'Ваша команда: ', `${b.before} → `, h('b', null, `${b.after} очк.`)) : null)) : null,
+      b.lines.length || b.before != null ? h('div', { class: 'brief-box' }, h('b', null, 'Что изменилось на поле'), h('ul', null, ...b.lines.map((x) => h('li', null, x)), b.before != null ? h('li', null, 'Счёт вашей команды на сегодня после события: ', `${b.before} → `, h('b', null, `${b.after} очк.`)) : null)) : null,
       hot ? h('p', { class: 'brief-hot', style: 'margin:0' }, '🔥 Горячая точка дня: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ' — +10 очков, пока узел ваш.') : null,
       h('div', { class: 'row2' }, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'На карту'),
         hot ? h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); if (mapRefs) mapRefs.flash(b.hit); } }, 'К горячей точке') : null)));
