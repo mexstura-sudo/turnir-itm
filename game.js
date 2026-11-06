@@ -405,7 +405,9 @@
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
   function viewEl(L) {
-    const el = G.view === 'map' ? mapView(L) : G.view === 'rank' ? rankView(L) : G.view === 'log' ? logView(L) : h('div', { class: 'mapcol' }, rulesSheet(), calendarSheet(), theorySheet());
+    const el = G.view === 'map' ? mapView(L) : G.view === 'rank' ? rankView(L) : G.view === 'log' ? logView(L) : h('div', { class: 'mapcol' },
+      G.live ? h('section', { class: 'sheet mycode' }, h('div', null, h('span', { class: 'eyebrow' }, 'Ваш код'), h('div', null, h('b', null, G.code))), h('button', { class: 'btn ghost', type: 'button', onclick: () => { store.del('zs_code'); showLogin(); } }, 'Выйти')) : null,
+      rulesSheet(), calendarSheet(), theorySheet());
     el.setAttribute('data-view', G.view); return el;
   }
   function showGame() {
@@ -413,17 +415,17 @@
     const L = G.L, me = G.me, ev = evOf(G);
     const tabs = h('div', { class: 'gtabs', role: 'tablist' }, ...[['map', 'Карта'], ['rank', 'Рейтинг'], ['log', 'Журнал'], ['rules', 'Правила']].map(([k, l]) => h('button', { class: 'key', type: 'button', role: 'tab', 'aria-pressed': String(G.view === k), onclick: () => { G.view = k; showGame(); } }, l)));
     const hot = L.hot != null && G.day ? L.nodes[L.hot] : null;
-    const event = G.day ? h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, `Событие дня · ${ev.wd}, ${ev.date}`), h('b', null, ev.t || ''), h('span', null, ev.d || ''),
+    const wideScr = window.innerWidth >= 700 && window.innerHeight >= 600;
+    const event = G.day ? h('details', { class: 'event', open: G.evOpen != null ? G.evOpen : wideScr, ontoggle: (e) => { G.evOpen = e.target.open; } }, h('summary', null, h('span', { class: 'ev-lbl' }, `Событие дня · ${ev.wd}, ${ev.date}`), h('b', null, ev.t || '')), h('span', null, ev.d || ''),
       hot && !G.over ? h('button', { type: 'button', class: 'ev-hot', onclick: () => { G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); } }, '🔥 Горячая точка: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ` — +10, ${hot.owner == null ? 'пока ничья' : 'держит ' + L.teams[hot.owner].name} ›`) : null)
       : h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, 'Скоро старт'), h('b', null, 'Игра начнётся 9 ноября в 0:00'), h('span', null, 'Вы уже в сети! Пока можно изучить карту, правила и разбор задач-боссов. Энергия начнёт копиться со старта.'));
-    const bar = G.live
-      ? h('div', { class: 'banner' }, h('span', null, `Ваш код: ${G.code}`), h('span', { class: 'demo-codes' }, h('button', { type: 'button', onclick: () => { store.del('zs_code'); showLogin(); } }, 'Выйти')))
-      : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо: турнир завершён.' : 'Демо: время можно ускорить.'),
+    const bar = G.live ? null
+      : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо · конец' : 'Демо'),
         h('span', { class: 'demo-codes' },
-          h('button', { type: 'button', disabled: G.over, onclick: () => skip(120) }, '⏩ +2 часа'),
-          h('button', { type: 'button', disabled: G.over, onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : 1440 - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ К итогам' : '⏭ Утро след. дня'),
+          h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
+          h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : 1440 - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
-    $app.append(buildHud(), event, bar, tabs, viewEl(L));
+    $app.append(...[buildHud(), event, bar, tabs, viewEl(L)].filter(Boolean));
     if ((G.day >= LAST_DAY || G.over) && G.view === 'map') $app.append(finalView(L));
     // демо: соперники ходят, пока вы смотрите
     if (!reduce && !G.live) G.timer = setInterval(() => { if (document.hidden || G.over) return; const t = Math.floor(Math.random() * L.teams.length); if (t === me.team && Math.random() < 0.5) return; const e = botAction(G, L, t, botName(L, t)); if (e) liveUpdate(L, e); }, 6500);
@@ -588,7 +590,7 @@
     const svg = sv('svg', { class: 'netmap', role: 'img', 'aria-label': 'Карта сети техникума' });
     const defs = sv('defs', {});
     defs.innerHTML = `<pattern id="hatchCut" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#8f8668" stroke-width="2"/></pattern>
-      <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>${FLOOR_DEFS}`;
+      <radialGradient id="haloG"><stop offset="0" stop-color="${myColor}" stop-opacity=".6"/><stop offset=".55" stop-color="${myColor}" stop-opacity=".3"/><stop offset="1" stop-color="${myColor}" stop-opacity="0"/></radialGradient>${FLOOR_DEFS}`;
     svg.append(defs);
     const bg = sv('g', { class: 'plan' }); svg.append(bg); drawPlan(L, bg);
     const layer = sv('g', {}); svg.append(layer);
@@ -614,21 +616,43 @@
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Как читать карту', title: 'Как читать карту', onclick: showLegend }, '?'));
     const wrap = h('div', { class: 'mapwrap' }, svg, hudChip, ctl, sheet);
     function zoom(f) { const cx = G.vb.x + G.vb.w / 2, cy = G.vb.y + G.vb.h / 2; G.vb.w = Math.max(170, Math.min((X1 - X0) * 1.25, G.vb.w * f)); G.vb.x = cx - G.vb.w / 2; setVB(); G.vb.y = cy - G.vb.h / 2; setVB(); }
-    svg.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, vx: G.vb.x, vy: G.vb.y, moved: false }; svg.setPointerCapture(e.pointerId); });
-    svg.addEventListener('pointermove', (e) => { if (!drag) return; const k = G.vb.w / svg.clientWidth, dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true; if (drag.moved) { G.vb.x = drag.vx - dx * k; G.vb.y = drag.vy - dy * k; setVB(); } });
-    svg.addEventListener('pointerup', (e) => {
-      const d = drag; drag = null; if (!d) return; if (d.moved) { setVB(); return; }
+    // палец: один — двигать карту, два — масштаб (щипок); перерисовка не чаще кадра
+    const ptrs = new Map(); let pinch = null, raf = 0;
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; setVB(); }); };
+    const toSvg = (cx, cy) => { const r = svg.getBoundingClientRect(); return { x: G.vb.x + (cx - r.left) / r.width * G.vb.w, y: G.vb.y + (cy - r.top) / r.height * G.vb.h }; };
+    svg.addEventListener('pointerdown', (e) => {
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { svg.setPointerCapture(e.pointerId); } catch (x) { /* не критично */ }
+      if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, vx: G.vb.x, vy: G.vb.y, moved: false };
+      else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, w: G.vb.w, anchor: toSvg((a.x + b.x) / 2, (a.y + b.y) / 2) }; if (drag) drag.moved = true; }
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && ptrs.size >= 2) {
+        const [a, b] = [...ptrs.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, d = Math.hypot(a.x - b.x, a.y - b.y) || 1, r = svg.getBoundingClientRect();
+        G.vb.w = Math.max(170, Math.min((X1 - X0) * 1.25, pinch.w * pinch.d / d)); G.vb.h = G.vb.w * (r.height / r.width);
+        G.vb.x = pinch.anchor.x - (mx - r.left) / r.width * G.vb.w; G.vb.y = pinch.anchor.y - (my - r.top) / r.height * G.vb.h;
+        schedule(); return;
+      }
+      if (!drag) return; const k = G.vb.w / svg.clientWidth, dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+      if (drag.moved) { G.vb.x = drag.vx - dx * k; G.vb.y = drag.vy - dy * k; schedule(); }
+    });
+    const release = (e) => {
+      ptrs.delete(e.pointerId);
+      if (pinch) { if (ptrs.size < 2) { pinch = null; drag = null; setVB(); } return; }
+      const d = drag; drag = null; if (!d) return; if (d.moved || e.type === 'pointercancel') { setVB(); return; }
       const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse());
       let best = null, bd = (24 * G.vb.w / 400) ** 2 + 400; L.nodes.forEach((n) => { const dd = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (dd < bd) { bd = dd; best = n; } });
       G.sel = best ? best.id : null; draw(); drawSheet(); if (best) flyTo(best.x, best.y, G.vb.w);
-    });
+    };
+    svg.addEventListener('pointerup', release); svg.addEventListener('pointercancel', release);
     svg.addEventListener('wheel', (e) => { e.preventDefault(); zoom(e.deltaY > 0 ? 1.15 : 0.87); }, { passive: false });
 
     function draw() {
       layer.replaceChildren();
       const reach = reachable(L, team), conns = L.teams.map((_, t) => connected(L, t));
       // моя территория — мягкое свечение
-      const halo = sv('g', { filter: 'url(#soft)', opacity: 0.55 }); conns[team].forEach((u) => halo.append(sv('circle', { cx: L.nodes[u].x, cy: L.nodes[u].y, r: 30, fill: myColor }))); layer.append(halo);
+      const halo = sv('g', { opacity: 0.9 }); conns[team].forEach((u) => halo.append(sv('circle', { cx: L.nodes[u].x, cy: L.nodes[u].y, r: 40, fill: 'url(#haloG)' }))); layer.append(halo);
       // кабели
       const myEdges = [];
       L.edges.forEach(([a, b]) => {

@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-title" content="Пульт турнира">
+<meta name="format-detection" content="telephone=no">
 <title>Пульт турнира ИТМ</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600&family=IBM+Plex+Mono:wght@500;700&display=swap">
@@ -32,7 +36,7 @@ h1{font-size:1.6rem} h2{font-size:1.15rem}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 .row>label{flex:1 1 200px}
 label{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:.85rem}
-input{font:inherit;padding:10px 11px;border:1.5px solid var(--line);border-radius:7px;background:var(--sheet);color:var(--ink)}
+input{font:inherit;font-size:16px;padding:10px 11px;border:1.5px solid var(--line);border-radius:7px;background:var(--sheet);color:var(--ink)}
 .btn{font:600 .95rem var(--font-body);padding:11px 16px;border-radius:7px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;white-space:nowrap}
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 .btn.danger{background:transparent;color:var(--bad);border:1.5px solid var(--bad);padding:5px 9px;font-size:.8rem}
@@ -97,7 +101,7 @@ let KEY = ls.get(LS), DATA = null, TAB = 'students';
 
 function login(msg){
   $.replaceChildren();
-  const k = h('input',{type:'password',id:'f-key',autocomplete:'current-password',placeholder:'Ключ из таблицы t_settings'});
+  const k = h('input',{type:'password',id:'f-key',autocomplete:'current-password',placeholder:'Ключ организатора'});
   const f = h('form',{class:'sheet'}, h('h2',null,'Вход организатора'), msg ? h('p',{class:'err'},msg) : null, h('div',{class:'row'}, h('label',null,'Ключ администратора', k), h('button',{class:'btn',type:'submit'},'Войти')));
   f.addEventListener('submit', (e)=>{ e.preventDefault(); KEY = k.value.trim(); load(); });
   $.append(h('h1',null,'Пульт турнира'), f); k.focus();

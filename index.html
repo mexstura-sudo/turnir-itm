@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-title" content="Турнир ИТМ">
+<meta name="format-detection" content="telephone=no">
 <title>Турнир по информатике ИТМ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#2f5a44">
@@ -192,7 +196,7 @@ function showStart(tab){
 
   // --- форма входа ---
   const name = h('input',{class:'t',id:'f-name',autocomplete:'name',placeholder:'Иванов Иван Иванович',maxlength:'120'});
-  const group = h('input',{class:'t',id:'f-group',placeholder:'Начните вводить, например ТОРА',maxlength:'40',autocomplete:'off',autocapitalize:'characters',spellcheck:'false'});
+  const group = h('input',{class:'t',id:'f-group',placeholder:'Например, ТОРА-231',maxlength:'40',autocomplete:'off',autocapitalize:'characters',spellcheck:'false'});
   const sug = h('div',{class:'gsug'});
   const err = h('p',{class:'err',hidden:true});
   const resolve = (v) => norm(v) === 'преподаватель' ? 'Преподаватель' : (groups.find(g=>norm(g.name)===norm(v))||{}).name;
@@ -361,6 +365,8 @@ document.querySelectorAll('[data-art]').forEach(n => {
   const k = n.dataset.art, seed = +n.dataset.seed || 1;
   n.replaceWith(k==='card' ? ART.punchCard(seed) : k==='cardv' ? ART.punchCard(seed, true) : k==='tube' ? ART.tube() : k==='gears' ? ART.gears() : k==='res2' ? ART.resistor(['#c9a227','#6a3fa0','#1c1c1c','#b9b9b9']) : k==='meter' ? ART.meter() : k==='leds' ? ART.leds(5) : ART.resistor());
 });
+// для автотестов
+window.__itm = { showTask, finish, get api(){ return api; }, get token(){ return TOKEN; } };
 boot();
 })();
 </script>
