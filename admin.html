@@ -66,6 +66,28 @@ tr.top td{background:var(--blue-soft)}
 .bar{height:8px;background:var(--cell);border-radius:2px;overflow:hidden;min-width:80px}
 .bar i{display:block;height:100%;background:var(--blue)}
 .confirm{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.gcode{font:700 1rem var(--font-mono);letter-spacing:.06em;user-select:all;-webkit-user-select:all;white-space:nowrap}
+select{font:inherit;font-size:16px;padding:10px 11px;border-radius:7px;border:1.5px solid var(--line);background:#fff;color:var(--ink)}
+input[type=search]{min-width:0}
+/* коды на телефоне — карточками */
+@media screen and (max-width:640px){
+  table.codes thead{display:none}
+  table.codes tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+  table.codes td{border:0;padding:0}
+  table.codes .c-name{font-weight:600}
+  table.codes .c-group{color:var(--muted);text-align:right}
+  table.codes .c-code{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  table.codes .c-code .gcode{font-size:1.25rem}
+  table.codes .c-seen{grid-column:1/-1}
+}
+@media print{
+  body{background:#fff!important}
+  body *{visibility:hidden}
+  .printable,.printable *{visibility:visible}
+  .printable{position:absolute;left:0;top:0;width:100%;overflow:visible}
+  .noprint{display:none!important}
+  th,td{color:#000!important;background:#fff!important;border-bottom:1px solid #999!important}
+}
 .pill.warn{color:#b44b0d;background:#fff1e6;margin-left:6px;vertical-align:1px}
 .dlg-back{position:fixed;inset:0;background:rgba(31,61,45,.55);display:grid;place-items:center;padding:16px;z-index:30}
 .dlg{width:min(460px,100%);display:flex;flex-direction:column;gap:10px}
@@ -112,7 +134,10 @@ function login(msg){
 }
 
 async function load(){
-  try { DATA = await rpc('t_admin_results', { p_key: KEY }); ls.set(LS, KEY); render(); }
+  try {
+    const [res, codes] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({}))]);
+    DATA = res; DATA.game = codes || {}; ls.set(LS, KEY); render();
+  }
   catch(e){ login(/BAD_KEY/.test(e.message) ? 'Неверный ключ.' : 'Нет связи с сервером: ' + e.message); }
 }
 
@@ -145,7 +170,7 @@ function winners(students, teachers){
 }
 
 function tabs(){
-  const T = [['students','Студенты'],['teachers','Преподаватели'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки']];
+  const T = [['students','Студенты'],['teachers','Преподаватели'],['codes','Коды игры'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки']];
   return h('div',{class:'tabs',role:'tablist'}, ...T.map(([k,l])=>h('button',{role:'tab','aria-selected':String(TAB===k),onclick:()=>{TAB=k;render();}},l)));
 }
 
@@ -203,6 +228,7 @@ function body(){
   const d = done();
   if (TAB==='students') return rank(d.filter(r=>!r.teacher), {spec:true,manage:true});
   if (TAB==='teachers') return rank(d.filter(r=>r.teacher), {teacher:true,manage:true});
+  if (TAB==='codes') return codesView(d);
   if (TAB==='all') return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Здесь и незавершённые попытки. Неуместное имя можно исправить («Изменить») или удалить участника — тогда он сможет пройти заново.'), rank(DATA.rows, {spec:true,status:true,manage:true}));
   if (TAB==='specs') {
     const st = d.filter(r=>!r.teacher);
@@ -240,11 +266,49 @@ function settingsForm(){
   return f;
 }
 
+// ---------- Коды входа в игру ----------
+let CODE_Q = '', CODE_G = '';
+function codesView(d){
+  const game = DATA.game || {};
+  const rows = d.filter(r => r.game_code).map(r => ({ ...r, g: game[r.game_code] || null }))
+    .sort((a, b) => (a.teacher - b.teacher) || a.group.localeCompare(b.group, 'ru') || a.name.localeCompare(b.name, 'ru'));
+  const groups = [...new Set(rows.map(r => r.group))];
+  const joined = rows.filter(r => r.g).length;
+  const q = h('input',{type:'search',placeholder:'Фамилия, группа или код',value:CODE_Q,autocomplete:'off',style:'flex:1 1 220px'});
+  const sel = h('select',{style:'flex:0 1 200px'}, h('option',{value:''},'Все группы'), ...groups.map(g => h('option',{value:g, selected:g===CODE_G}, g)));
+  const tbody = h('tbody');
+  const copy = async (code, btn) => {
+    try { await navigator.clipboard.writeText(code); btn.textContent = 'Скопирован'; }
+    catch(e){ btn.textContent = 'Выделите код'; }
+    setTimeout(() => { btn.textContent = 'Копировать'; }, 1600);
+  };
+  const seen = (g) => g ? (g.last_seen ? 'заходил ' + fmtDate(g.last_seen) : 'вошёл') + (g.captures ? ' · захватов: ' + g.captures : '') : 'ещё не входил';
+  const fill = () => {
+    const t = CODE_Q.trim().toLowerCase().replace(/ё/g,'е');
+    const list = rows.filter(r => (!CODE_G || r.group === CODE_G) && (!t || (r.name + ' ' + r.group + ' ' + r.game_code).toLowerCase().replace(/ё/g,'е').includes(t)));
+    tbody.replaceChildren(...(list.length ? list.map(r => h('tr', null,
+      h('td', {class:'c-name'}, r.name),
+      h('td', {class:'c-group'}, r.teacher ? 'Преподаватель' : r.group),
+      h('td', {class:'c-code'}, h('span',{class:'gcode'}, r.game_code), ' ', h('button',{class:'btn ghost noprint',style:'padding:5px 9px;font-size:.78rem;min-height:32px',onclick:(e)=>copy(r.game_code, e.currentTarget)},'Копировать')),
+      h('td', {class:'c-seen small' + (r.g ? '' : ' muted')}, (r.g ? '✓ ' : '') + seen(r.g))))
+      : [h('tr', null, h('td',{colspan:'4',class:'muted'},'Никого не нашлось.'))]));
+  };
+  q.addEventListener('input', () => { CODE_Q = q.value; fill(); });
+  sel.addEventListener('change', () => { CODE_G = sel.value; fill(); });
+  fill();
+  return h('div',{style:'display:flex;flex-direction:column;gap:10px'},
+    h('p',{class:'small muted',style:'margin:0'}, 'Код выдаётся после олимпиады. Если участник его потерял — найдите здесь и продиктуйте. Вошли в игру: ' + joined + ' из ' + rows.length + '.'),
+    h('div',{class:'row noprint',style:'flex-wrap:wrap'}, q, sel, h('button',{class:'btn ghost',onclick:()=>window.print()},'Распечатать')),
+    h('div',{class:'tbl printable'}, h('table', {class:'codes'},
+      h('thead', null, h('tr', null, h('th',null,'Участник'), h('th',null,'Группа'), h('th',null,'Код игры'), h('th',null,'В игре'))),
+      tbody)));
+}
+
 function csv(){
   const q = (v) => '"' + String(v ?? '').replace(/"/g,'""') + '"';
-  const head = ['Место','ФИО','Группа','Специальность','Преподаватель','Статус','Баллы','Верно','Время (мин:сек)','Начал','Закончил', ...Array.from({length:10},(_,i)=>'Задание '+(i+1))];
+  const head = ['Место','ФИО','Группа','Специальность','Преподаватель','Статус','Баллы','Верно','Время (мин:сек)','Начал','Закончил','Код игры', ...Array.from({length:10},(_,i)=>'Задание '+(i+1))];
   const lines = [head.map(q).join(';')];
-  DATA.rows.forEach((r,i)=> lines.push([i+1, r.name, r.group, specName(r.specialty), r.teacher?'да':'', r.status==='done'?'завершена':'идёт', r.score, r.correct, fmtMs(r.time_ms), fmtDate(r.started_at), fmtDate(r.finished_at), ...(r.tasks||[]).map(t=>(TPL[t.tpl]||t.tpl)+': '+(t.ok?'верно':'нет'))].map(q).join(';')));
+  DATA.rows.forEach((r,i)=> lines.push([i+1, r.name, r.group, specName(r.specialty), r.teacher?'да':'', r.status==='done'?'завершена':'идёт', r.score, r.correct, fmtMs(r.time_ms), fmtDate(r.started_at), fmtDate(r.finished_at), r.game_code||'', ...(r.tasks||[]).map(t=>(TPL[t.tpl]||t.tpl)+': '+(t.ok?'верно':'нет'))].map(q).join(';')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' });
   const a = h('a',{href:URL.createObjectURL(blob),download:'turnir-rezultaty.csv'}); document.body.append(a); a.click(); a.remove();
 }
