@@ -66,11 +66,15 @@ tr.top td{background:var(--blue-soft)}
 .bar{height:8px;background:var(--cell);border-radius:2px;overflow:hidden;min-width:80px}
 .bar i{display:block;height:100%;background:var(--blue)}
 .confirm{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pill.warn{color:#b44b0d;background:#fff1e6;margin-left:6px;vertical-align:1px}
+.dlg-back{position:fixed;inset:0;background:rgba(31,61,45,.55);display:grid;place-items:center;padding:16px;z-index:30}
+.dlg{width:min(460px,100%);display:flex;flex-direction:column;gap:10px}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 <script src="config.js"></script>
+<script src="names.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function(){
@@ -148,28 +152,58 @@ function tabs(){
 function rank(rows, opts={}){
   if (!rows.length) return h('p',{class:'muted'},'Пока нет результатов.');
   return h('div',{class:'tbl'}, h('table',null,
-    h('thead',null, h('tr',null, h('th',null,'#'), h('th',null,'Участник'), opts.teacher?null:h('th',null,'Группа'), opts.spec?h('th',null,'Специальность'):null, h('th',null,'Баллы'), h('th',null,'Верно'), h('th',null,'Время'), h('th',null,'Задания'), opts.status?h('th',null,'Статус'):null, opts.del?h('th',null,''):null)),
+    h('thead',null, h('tr',null, h('th',null,'#'), h('th',null,'Участник'), opts.teacher?null:h('th',null,'Группа'), opts.spec?h('th',null,'Специальность'):null, h('th',null,'Баллы'), h('th',null,'Верно'), h('th',null,'Время'), h('th',null,'Задания'), opts.status?h('th',null,'Статус'):null, opts.manage?h('th',null,''):null)),
     h('tbody',null, ...rows.map((r,i)=>h('tr',{class: !opts.status && i<3 ? 'top' : ''},
-      h('td',{class:'place'}, String(i+1)), h('td',null, r.name, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
+      h('td',{class:'place'}, String(i+1)), h('td',null, r.name, suspicious(r.name) ? h('span',{class:'pill warn',title:'Похоже на кличку или ругательство — проверьте и переименуйте или удалите'},'проверьте') : null, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
       opts.teacher?null:h('td',null,r.group), opts.spec?h('td',{class:'small'},specName(r.specialty)):null,
       h('td',{class:'num'},String(r.score)), h('td',{class:'num'},`${r.correct}/10`), h('td',{class:'num'},fmtMs(r.time_ms)),
       h('td',null, h('div',{class:'dots'}, ...(r.tasks||[]).map(t=>h('i',{class:t.ok===true?'ok':t.ok===false?'no':'',title:(TPL[t.tpl]||t.tpl)})))),
       opts.status?h('td',null,h('span',{class:'pill '+r.status}, r.status==='done'?'завершена':'идёт')):null,
-      opts.del?h('td',null, delBtn(r)):null)))));
+      opts.manage?h('td',null, manage(r)):null)))));
 }
 
-function delBtn(r){
+const suspicious = (n) => !!(window.ITM_NAMES && window.ITM_NAMES.problem(n));
+const NAME_ERR = { BAD_NAME:'Нужны минимум фамилия и имя.', NAME_RULES:'Только русские буквы, пробел и дефис.', ALREADY:'В этой группе уже есть участник с таким именем.', NOT_FOUND:'Участник уже удалён — обновите страницу.', BAD_KEY:'Ключ устарел — войдите заново.' };
+const nameErr = (e) => { const m = String(e && e.message || e); for (const k in NAME_ERR) if (m.includes(k)) return NAME_ERR[k]; return 'Не получилось: ' + m; };
+// кнопки в строке участника: переименовать и удалить
+function manage(r){
   const box = h('div',{class:'confirm'});
-  const ask = () => box.replaceChildren(h('span',{class:'small'},'Удалить попытку? Участник сможет пройти заново.'), h('button',{class:'btn danger',onclick:async()=>{ try{ await rpc('t_admin_delete',{p_key:KEY,p_id:r.id}); load(); }catch(e){ box.replaceChildren(h('span',{class:'err small'},e.message)); } }},'Удалить'), h('button',{class:'btn ghost',style:'padding:5px 9px;font-size:.8rem',onclick:reset},'Отмена'));
-  const reset = () => box.replaceChildren(h('button',{class:'btn danger',onclick:ask},'Удалить'));
+  const small = 'padding:6px 10px;font-size:.8rem;min-height:34px';
+  const reset = () => box.replaceChildren(
+    h('button',{class:'btn ghost',style:small,onclick:()=>renameDlg(r)},'Изменить'),
+    h('button',{class:'btn danger',style:'min-height:34px',onclick:ask},'Удалить'));
+  const ask = () => box.replaceChildren(
+    h('span',{class:'small'},'Удалить «' + r.name + '»? Результат и игрок в игре исчезнут, участник сможет пройти заново.'),
+    h('button',{class:'btn danger',style:'min-height:34px',onclick:async()=>{ try{ await rpc('t_admin_delete',{p_key:KEY,p_id:r.id}); load(); }catch(e){ box.replaceChildren(h('span',{class:'err small'},nameErr(e))); setTimeout(reset, 2500); } }},'Да, удалить'),
+    h('button',{class:'btn ghost',style:small,onclick:reset},'Отмена'));
   reset(); return box;
+}
+function renameDlg(r){
+  const inp = h('input',{value:r.name,maxlength:'80',autocomplete:'off',style:'width:100%'});
+  const msg = h('p',{class:'err small',hidden:true});
+  const save = h('button',{class:'btn',type:'submit'},'Сохранить');
+  const close = () => m.remove();
+  const f = h('form',{class:'sheet dlg'},
+    h('h2',null,'Переименовать участника'),
+    h('p',{class:'small muted',style:'margin:0'}, (r.teacher ? 'Преподаватель' : 'Группа ' + r.group) + '. Новое имя увидят в рейтинге и в игре.'),
+    inp, msg,
+    h('div',{class:'row',style:'justify-content:flex-end'}, h('button',{class:'btn ghost',type:'button',onclick:close},'Отмена'), save));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); msg.hidden = true;
+    const n = window.ITM_NAMES ? window.ITM_NAMES.fix(inp.value) : inp.value.trim();
+    save.disabled = true; save.textContent = 'Сохраняю…';
+    try { await rpc('t_admin_rename',{p_key:KEY,p_id:r.id,p_name:n}); close(); load(); }
+    catch(err){ msg.textContent = nameErr(err); msg.hidden = false; save.disabled = false; save.textContent = 'Сохранить'; }
+  });
+  const m = h('div',{class:'dlg-back',onclick:(e)=>{ if (e.target === m) close(); }}, f);
+  document.body.append(m); inp.focus(); inp.select();
 }
 
 function body(){
   const d = done();
-  if (TAB==='students') return rank(d.filter(r=>!r.teacher), {spec:true});
-  if (TAB==='teachers') return rank(d.filter(r=>r.teacher), {teacher:true});
-  if (TAB==='all') return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Удаляйте попытку только при технической проблеме (например, участник ошибся в ФИО или пропал интернет).'), rank(DATA.rows, {spec:true,status:true,del:true}));
+  if (TAB==='students') return rank(d.filter(r=>!r.teacher), {spec:true,manage:true});
+  if (TAB==='teachers') return rank(d.filter(r=>r.teacher), {teacher:true,manage:true});
+  if (TAB==='all') return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Здесь и незавершённые попытки. Неуместное имя можно исправить («Изменить») или удалить участника — тогда он сможет пройти заново.'), rank(DATA.rows, {spec:true,status:true,manage:true}));
   if (TAB==='specs') {
     const st = d.filter(r=>!r.teacher);
     const codes = DATA.specialties.map(s=>s.code).filter(c=>c!=='teacher');

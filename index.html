@@ -23,6 +23,7 @@
 <script src="config.js"></script>
 <script src="art.js"></script>
 <script src="mechanics.js"></script>
+<script src="names.js"></script>
 <script src="demo-tasks.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
@@ -48,6 +49,7 @@ const ERR = {
   ALREADY: 'Участник с такими ФИО и группой уже проходил турнир. Повторная попытка невозможна.',
   NOT_STARTED: 'Турнир ещё не начался.', ENDED: 'Турнир уже завершён.',
   BAD_NAME: 'Введите фамилию и имя полностью (минимум два слова).', BAD_GROUP: 'Выберите группу из списка.',
+  NAME_RULES: 'Укажите настоящие фамилию и имя полностью, русскими буквами — как в журнале группы. Ники, сокращения и шуточные имена не принимаются.',
   NO_ATTEMPT: 'Попытка не найдена.', NO_TASKS: 'Банк заданий не загружен. Сообщите организатору.',
 };
 const errText = (e) => { const m = String(e && e.message || e); for (const k in ERR) if (m.includes(k)) return ERR[k]; return 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'; };
@@ -97,7 +99,7 @@ if (!DEMO) {
     publicResults: async () => ({ open:false }),
     top: async () => DONE.slice().sort((a,b)=>b.score-a.score),
     start: async (n, g) => {
-      if (!/\S+\s+\S+/.test(n.trim())) throw new Error('BAD_NAME');
+      n = window.ITM_NAMES.fix(n); const bad = window.ITM_NAMES.problem(n); if (bad) throw new Error(bad);
       const teacher = norm(g) === 'преподаватель'; const grp = GROUPS.find(x=>norm(x.name)===norm(g));
       if (!teacher && !grp) throw new Error('BAD_GROUP');
       const sp = [null, null, teacher ? null : PROF[grp.name.split('-')[0]][0]];
@@ -195,7 +197,7 @@ function showStart(tab){
   const groups = INFO.groups || [];
 
   // --- форма входа ---
-  const name = h('input',{class:'t',id:'f-name',autocomplete:'name',placeholder:'Иванов Иван Иванович',maxlength:'120'});
+  const name = h('input',{class:'t',id:'f-name',autocomplete:'name',autocapitalize:'words',spellcheck:'false',placeholder:'Иванов Иван Иванович',maxlength:'80'});
   const group = h('input',{class:'t',id:'f-group',placeholder:'Например, ТОРА-231',maxlength:'40',autocomplete:'off',autocapitalize:'characters',spellcheck:'false'});
   const sug = h('div',{class:'gsug'});
   const err = h('p',{class:'err',hidden:true});
@@ -212,14 +214,15 @@ function showStart(tab){
   group.addEventListener('input', drawSug); drawSug();
   const form = h('form',{class:'sheet',novalidate:true,id:'login',hidden:true},
     h('h2',null,'Регистрация участника'),
-    h('label',{class:'f'},'Фамилия, имя, отчество', name),
+    h('label',{class:'f'},'Фамилия, имя, отчество', name, h('span',{class:'small muted',style:'font-weight:400;text-transform:none;letter-spacing:0'},'Как в журнале группы. Имя увидят в рейтинге — ники не принимаются.')),
     h('label',{class:'f'},'Группа', group), sug, err,
     h('button',{class:'btn',type:'submit'},'Начать турнир'));
   form.addEventListener('submit', (ev) => {
     ev.preventDefault(); err.hidden = true;
-    const n = name.value.trim().replace(/\s+/g,' '), g = resolve(group.value);
+    const n = window.ITM_NAMES.fix(name.value), g = resolve(group.value);
     const fail = (m) => { err.textContent = m; err.hidden = false; };
-    if (!/^\S+\s+\S+/.test(n) || n.length < 5) return fail(ERR.BAD_NAME);
+    const bad = window.ITM_NAMES.problem(n); if (bad) return fail(ERR[bad]);
+    name.value = n;
     if (!g) return fail(ERR.BAD_GROUP);
     confirmStart(n, g);
   });
