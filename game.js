@@ -12,7 +12,7 @@
   const LIVE = !!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase);
   const sb = LIVE ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: false } }) : null;
   async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args); if (error) throw new Error(error.message || 'NETWORK'); return data; }
-  const ERR = { BAD_CODE: 'Такого кода нет. Он выдаётся после олимпиады — проверьте цифры.', NOT_STARTED: 'Игра ещё не началась — старт 9 ноября в 0:00.', ENDED: 'Игра завершена.', NOT_ALLOWED: 'Этот узел сейчас недоступен — карта успела измениться.', NO_ENERGY: 'Не хватает энергии.', NO_TASK: 'Задача устарела — откройте узел заново.', NO_TEAM: 'Команда не найдена — напишите организатору.' };
+  const ERR = { BAD_CODE: 'Такого кода нет. Он выдаётся после олимпиады — проверьте цифры.', NOT_STARTED: 'Игра ещё не началась — дата старта во вкладке «Правила».', ENDED: 'Игра завершена.', NOT_ALLOWED: 'Этот узел сейчас недоступен — карта успела измениться.', NO_ENERGY: 'Не хватает энергии.', NO_TASK: 'Задача устарела — откройте узел заново.', NO_TEAM: 'Команда не найдена — напишите организатору.' };
   const errText = (e) => { const m = String((e && e.message) || e); const k = Object.keys(ERR).find((x) => m.includes(x)); return k ? ERR[k] : 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'; };
   const irkMin = (ms) => { const d = new Date(ms); return ((d.getUTCHours() + 8) % 24) * 60 + d.getUTCMinutes(); };
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
@@ -31,13 +31,24 @@
   // неделя турнира: 5 дней, каждый день — событие, которое переворачивает поле
   const DAYS = [
     null,
-    { date: '9 ноября', wd: 'пн', t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡ — нужна только задача. Занимайте территорию, пока она ничья.', captureFree: true, hot: 0 },
-    { date: '10 ноября', wd: 'вт', t: 'Блэкаут в Серверной', d: 'Ночью пропало питание: все узлы Серверной снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', region: 2, serverX: 2, hot: 5 },
-    { date: '11 ноября', wd: 'ср', t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно.', flip: 'doors', fortifyFree: true, hot: 4 },
-    { date: '12 ноября', wd: 'чт', t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 3 },
-    { date: '13 ноября', wd: 'пт', t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — сегодня в 22:00.', flip: 'shields', attack: -1, coreX: 2, hot: 6 },
+    { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡ — нужна только задача. Занимайте территорию, пока она ничья.', captureFree: true, hot: 0 },
+    { t: 'Блэкаут в Серверной', d: 'Ночью пропало питание: все узлы Серверной снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', region: 2, serverX: 2, hot: 5 },
+    { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно.', flip: 'doors', fortifyFree: true, hot: 4 },
+    { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 3 },
+    { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 6 },
   ];
-  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6; // финал в 22:00 пятницы; энергия копится до 6
+  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6; // демо: финал в 22:00 пятого дня; энергия копится до 6
+  // даты игры берутся с сервера (пульт → «Игра: сроки»); в демо — 9–13 ноября
+  const DEF_START = Date.UTC(2026, 10, 8, 16, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
+  const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  const fmtIrk = (d) => ({ text: d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()], short: d.getUTCDate() + '.' + String(d.getUTCMonth() + 1).padStart(2, '0'), wd: WDAYS[d.getUTCDay()], hm: String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'), key: d.toISOString().slice(0, 10) });
+  const atIrk = (ms) => fmtIrk(new Date(ms + 8 * 3600e3));
+  const gStart = () => G.startsAt || DEF_START, gEnd = () => G.endsAt || DEF_END;
+  // дата n-го игрового дня (по календарю Иркутска)
+  function dayDate(n) { const b = new Date(gStart() + 8 * 3600e3); return fmtIrk(new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate() + Math.max(1, n) - 1, 12))); }
+  const startText = () => { const a = atIrk(gStart()); return `${a.text} в ${a.hm.replace(/^0(?=\d:)/, '')}`; };
+  const finalText = (day) => { const e = atIrk(gEnd()); return (day && dayDate(day).key === e.key ? 'сегодня' : e.text) + ' в ' + e.hm; };
+  const evText = (ev, day) => String(ev.d || '').replace('{final}', finalText(day));
   const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   // группы — от зелёного до малинового; жёлто-оранжевый и красный оставлены преподавателям и значкам атаки
   const teamColor = (i, n) => `hsl(${Math.round(78 + ((i * 11) % n) * (272 / n))} ${i % 2 ? 50 : 62}% ${i % 3 === 0 ? 42 : i % 3 === 1 ? 52 : 34}%)`;
@@ -277,7 +288,7 @@
     $app.append(
       h('div', { class: 'screen' }, h('div', { class: 'glass g-intro' }, netArt(), h('div', { class: 'hero-txt' },
         h('h1', null, 'Захват сети ИТМ'),
-        h('p', { style: 'margin:0' }, 'Пять дней, 9–13 ноября: 30 групп и команда преподавателей в одной сети учебного корпуса. Взламывайте узлы задачами по информатике, держите линии связи и выводите свою команду на первое место.')))),
+        h('p', { style: 'margin:0' }, 'Пять дней: 30 групп и команда преподавателей в одной сети учебного корпуса. Взламывайте узлы задачами по информатике, держите линии связи и выводите свою команду на первое место.')))),
       LIVE ? null : h('div', { class: 'banner' }, h('span', null, 'Демо-режим: соперники — боты, данные не сохраняются.'),
         h('span', { class: 'demo-codes' }, h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-7203-19'; } }, 'Код студента'), h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-0000-01'; } }, 'Код преподавателя'))),
       form,
@@ -349,7 +360,7 @@
         h('div', null, h('b', null, '🔗 Связь'), h('p', null, 'Узлы, отрезанные от базы, не приносят очков. Между цехами кабели идут только через двери.')),
         h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5. Больше половины цеха — ещё +10.')),
         h('div', null, h('b', null, '🔥 Горячая точка'), h('p', null, 'Каждый день один узел горит: пока он ваш, он приносит +10 очков.')),
-        h('div', null, h('b', null, '📅 5 дней'), h('p', null, 'С 9 по 13 ноября. Каждую полночь — событие, которое переворачивает поле. Итоги — 13 ноября в 22:00.'))),
+        h('div', null, h('b', null, '📅 5 дней'), h('p', null, `С ${dayDate(1).text} по ${atIrk(gEnd()).text}. Каждую полночь — событие, которое переворачивает поле. Итоги — ${finalText(0)}.`))),
       h('p', { class: 'small muted', style: 'margin:0' }, 'Ошибка во взломе сжигает потраченную энергию. Студенты играют за свои группы, преподаватели — общей командой «Преподаватели» с базой в Учительской.'));
   }
   // теория для задач уровня БОСС
@@ -385,10 +396,10 @@
         h('li', null, 'Получили ответ — подставьте его обратно в условие.'))));
   }
   function calendarSheet() {
-    return h('section', { class: 'sheet' }, h('h2', null, 'Неделя турнира · 9–13 ноября'),
+    return h('section', { class: 'sheet' }, h('h2', null, `Неделя игры · ${dayDate(1).text} – ${dayDate(LAST_DAY).text}`),
       h('ol', { class: 'cal' }, ...DAYS.slice(1).map((d, i) => { const n = i + 1, open = n <= G.day; return h('li', { class: n === G.day ? 'today' : n < G.day ? 'past' : 'locked' },
-        h('span', { class: 'cal-d' }, h('b', null, d.date.split(' ')[0]), h('small', null, d.wd)),
-        h('div', null, h('b', null, open ? d.t : 'Событие засекречено'), h('span', null, open ? d.d : `Откроется ${d.date} в 0:00 — и перевернёт поле.`))); })),
+        h('span', { class: 'cal-d' }, h('b', null, dayDate(n).text.split(' ')[0]), h('small', null, dayDate(n).wd)),
+        h('div', null, h('b', null, open ? d.t : 'Событие засекречено'), h('span', null, open ? evText(d, n) : `Откроется ${dayDate(n).text} в 0:00 — и перевернёт поле.`))); })),
       h('p', { class: 'small muted', style: 'margin:0' }, 'Каждую полночь начинается новый день: событие меняет поле, на карте загорается новая горячая точка 🔥.'));
   }
   const kindLabel = (n) => ({ core: 'Ядро', server: 'Сервер', node: 'Узел', base: 'База' }[n.kind]);
@@ -397,8 +408,8 @@
   function buildHud() {
     const L = G.L, me = G.me, myT = L.teams[me.team], ev = evOf(G);
     if (G.live) G.clock = irkMin(Date.now() + (G.skew || 0));
-    const daySub = G.day ? `${ev.wd} ${ev.date.split(' ')[0]}.11 · ${hhmm(G.clock)}` : 'старт 9.11 в 0:00';
-    const enSub = G.over ? 'игра окончена' : !G.day ? 'старт 9.11' : me.energy >= E_CAP ? 'запас полон' : '+1 в ' + hhmm((Math.floor(G.clock / 120) + 1) * 120);
+    const daySub = G.day ? `${dayDate(G.day).wd} ${dayDate(G.day).short} · ${hhmm(G.clock)}` : `старт ${atIrk(gStart()).short}`;
+    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : me.energy >= E_CAP ? 'запас полон' : '+1 в ' + hhmm((Math.floor(G.clock / 120) + 1) * 120);
     return h('div', { class: 'hud' },
       h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: `background:${myT.color}` }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
       h('div', { class: 'hud-en', title: 'Энергия' }, h('small', null, 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
@@ -416,9 +427,9 @@
     const tabs = h('div', { class: 'gtabs', role: 'tablist' }, ...[['map', 'Карта'], ['rank', 'Рейтинг'], ['log', 'Журнал'], ['rules', 'Правила']].map(([k, l]) => h('button', { class: 'key', type: 'button', role: 'tab', 'aria-pressed': String(G.view === k), onclick: () => { G.view = k; showGame(); } }, l)));
     const hot = L.hot != null && G.day ? L.nodes[L.hot] : null;
     const wideScr = window.innerWidth >= 700 && window.innerHeight >= 600;
-    const event = G.day ? h('details', { class: 'event', open: G.evOpen != null ? G.evOpen : wideScr, ontoggle: (e) => { G.evOpen = e.target.open; } }, h('summary', null, h('span', { class: 'ev-lbl' }, `Событие дня · ${ev.wd}, ${ev.date}`), h('b', null, ev.t || '')), h('span', null, ev.d || ''),
+    const event = G.day ? h('details', { class: 'event', open: G.evOpen != null ? G.evOpen : wideScr, ontoggle: (e) => { G.evOpen = e.target.open; } }, h('summary', null, h('span', { class: 'ev-lbl' }, `Событие дня · ${dayDate(G.day).wd}, ${dayDate(G.day).text}`), h('b', null, ev.t || '')), h('span', null, evText(ev, G.day)),
       hot && !G.over ? h('button', { type: 'button', class: 'ev-hot', onclick: () => { G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); } }, '🔥 Горячая точка: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ` — +10, ${hot.owner == null ? 'пока ничья' : 'держит ' + L.teams[hot.owner].name} ›`) : null)
-      : h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, 'Скоро старт'), h('b', null, 'Игра начнётся 9 ноября в 0:00'), h('span', null, 'Вы уже в сети! Пока можно изучить карту, правила и разбор задач-боссов. Энергия начнёт копиться со старта.'));
+      : h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, 'Скоро старт'), h('b', null, `Игра начнётся ${startText()}`), h('span', null, 'Вы уже в сети! Пока можно изучить карту, правила и разбор задач-боссов. Энергия начнёт копиться со старта.'));
     const bar = G.live ? null
       : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо · конец' : 'Демо'),
         h('span', { class: 'demo-codes' },
@@ -705,7 +716,7 @@
       if (live && own && n.kind !== 'base' && n.shield < 3 && conn) acts.push('fortify');
       const tier = (a) => (a === 'attack' ? (n.shield >= 2 ? '⭐⭐⭐' : '⭐⭐') : '⭐');
       const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? 'Свободный узел рядом с вашей сетью.' : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
-      const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? 'Игра начнётся 9 ноября в 0:00 — тогда узлы можно будет захватывать.' : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
+      const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
       fillEl(sheet,
         h('button', { type: 'button', class: 'sh-x', 'aria-label': 'Закрыть', onclick: () => { G.sel = null; draw(); drawSheet(); } }, '×'),
@@ -857,7 +868,7 @@
   }
   function finalView(L) {
     const rows = standings(L);
-    return h('section', { class: 'sheet final screws' }, h('h2', null, G.over ? 'Итоги турнира' : 'Финальный день'), h('p', { class: 'small muted', style: 'margin:0' }, G.over ? 'Турнир завершён 13 ноября в 22:00.' : 'Итоги — сегодня в 22:00. Сейчас — по текущему счёту.'),
+    return h('section', { class: 'sheet final screws' }, h('h2', null, G.over ? 'Итоги турнира' : 'Финальный день'), h('p', { class: 'small muted', style: 'margin:0' }, G.over ? `Игра завершена ${finalText(0)}.` : `Итоги — ${finalText(G.day)}. Сейчас — по текущему счёту.`),
       h('div', { class: 'podium' }, ...rows.slice(0, 3).map((r, i) => h('div', { class: 'pd pd' + (i + 1) }, h('span', { class: 'swatch', style: `background:${r.t.color}` }), h('b', null, r.t.name), h('span', null, r.s + ' очков'), h('i', null, ['🥇', '🥈', '🥉'][i])))),
       rows.slice(0, 3).some((r) => r.t.teach) ? h('p', { class: 'small', style: 'margin:0' }, 'Лучшая группа студентов: ', h('b', null, rows.find((r) => !r.t.teach).t.name)) : null);
   }
@@ -871,8 +882,8 @@
     const L = G.L, ev = DAYS[b.day], hot = L.hot != null ? L.nodes[L.hot] : null;
     const close = () => { m.remove(); if (mapRefs) mapRefs.flash(b.hit); };
     const m = h('div', { class: 'modal brief-modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'sheet brief screws' },
-      h('span', { class: 'eyebrow' }, `День ${b.day} из ${LAST_DAY} · ${ev.wd}, ${ev.date}`),
-      h('h2', null, ev.t), h('p', { style: 'margin:0' }, ev.d),
+      h('span', { class: 'eyebrow' }, `День ${b.day} из ${LAST_DAY} · ${dayDate(b.day).wd}, ${dayDate(b.day).text}`),
+      h('h2', null, ev.t), h('p', { style: 'margin:0' }, evText(ev, b.day)),
       b.lines.length || b.before != null ? h('div', { class: 'brief-box' }, h('b', null, 'Что изменилось на поле'), h('ul', null, ...b.lines.map((x) => h('li', null, x)), b.before != null ? h('li', null, 'Ваша команда: ', `${b.before} → `, h('b', null, `${b.after} очк.`)) : null)) : null,
       hot ? h('p', { class: 'brief-hot', style: 'margin:0' }, '🔥 Горячая точка дня: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ' — +10 очков, пока узел ваш.') : null,
       h('div', { class: 'row2' }, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'На карту'),

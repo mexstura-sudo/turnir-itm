@@ -135,8 +135,8 @@ function login(msg){
 
 async function load(){
   try {
-    const [res, codes] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({}))]);
-    DATA = res; DATA.game = codes || {}; ls.set(LS, KEY); render();
+    const [res, codes, gst] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({})), rpc('g_admin_state', { p_key: KEY }).catch(() => null)]);
+    DATA = res; DATA.game = codes || {}; DATA.gstate = gst; ls.set(LS, KEY); render();
   }
   catch(e){ login(/BAD_KEY/.test(e.message) ? 'Неверный ключ.' : 'Нет связи с сервером: ' + e.message); }
 }
@@ -160,7 +160,7 @@ function render(){
     winners(students, teachers),
     tabs());
   $.append(h('div',{class:'sheet'}, body()));
-  $.append(settingsForm());
+  $.append(settingsForm()); if (DATA.gstate) $.append(gameForm());
 }
 const stat = (v,l) => h('div',{class:'stat'}, h('b',null,String(v)), h('span',null,l));
 
@@ -170,7 +170,7 @@ function winners(students, teachers){
 }
 
 function tabs(){
-  const T = [['students','Студенты'],['teachers','Преподаватели'],['codes','Коды игры'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки']];
+  const T = [['students','Студенты'],['teachers','Преподаватели'],['game','Игра'],['codes','Коды игры'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки']];
   return h('div',{class:'tabs',role:'tablist'}, ...T.map(([k,l])=>h('button',{role:'tab','aria-selected':String(TAB===k),onclick:()=>{TAB=k;render();}},l)));
 }
 
@@ -229,6 +229,7 @@ function body(){
   if (TAB==='students') return rank(d.filter(r=>!r.teacher), {spec:true,manage:true});
   if (TAB==='teachers') return rank(d.filter(r=>r.teacher), {teacher:true,manage:true});
   if (TAB==='codes') return codesView(d);
+  if (TAB==='game') return gameView();
   if (TAB==='all') return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Здесь и незавершённые попытки. Неуместное имя можно исправить («Изменить») или удалить участника — тогда он сможет пройти заново.'), rank(DATA.rows, {spec:true,status:true,manage:true}));
   if (TAB==='specs') {
     const st = d.filter(r=>!r.teacher);
@@ -258,12 +259,59 @@ function settingsForm(){
   const s = DATA.settings;
   const t = h('input',{id:'f-title',value:s.title}), a = h('input',{id:'f-start',type:'datetime-local',value:toLocal(s.starts_at)}), b = h('input',{id:'f-end',type:'datetime-local',value:toLocal(s.ends_at)});
   const msg = h('p',{class:'small',hidden:true});
-  const f = h('form',{class:'sheet'}, h('h2',null,'Настройки турнира'), h('p',{class:'small muted',style:'margin:0'},'Время — иркутское.'),
+  const f = h('form',{class:'sheet'}, h('h2',null,'Олимпиада: название и сроки'), h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Эти даты — только для олимпиады; у игры свои сроки ниже.'),
     h('div',{class:'row'}, h('label',null,'Название', t), h('label',null,'Старт', a), h('label',null,'Финиш', b), h('button',{class:'btn',type:'submit'},'Сохранить')), msg);
   f.addEventListener('submit', async (e)=>{ e.preventDefault(); msg.hidden=false; msg.className='small';
     try { await rpc('t_admin_settings',{p_key:KEY,p_title:t.value,p_starts:fromLocal(a.value),p_ends:fromLocal(b.value)}); msg.textContent='Сохранено.'; setTimeout(load, 600); }
     catch(err){ msg.className='small err'; msg.textContent = /BAD_DATES/.test(err.message) ? 'Финиш должен быть позже старта.' : err.message; } });
   return f;
+}
+
+// ---------- Игра «Захват сети»: сроки, сброс, рейтинг ----------
+function gamePhase(){
+  const g = DATA.gstate.settings, now = new Date(g.now), st = new Date(g.starts_at), en = new Date(g.ends_at);
+  if (now < st) return 'Ещё не началась — старт ' + fmtDate(g.starts_at);
+  if (now >= en) return 'Завершена ' + fmtDate(g.ends_at);
+  return 'Идёт: день ' + g.today + ' из 5';
+}
+function gameForm(){
+  const g = DATA.gstate.settings;
+  const a = h('input',{type:'datetime-local',value:toLocal(g.starts_at)}), b = h('input',{type:'datetime-local',value:toLocal(g.ends_at)});
+  const msg = h('p',{class:'small',hidden:true});
+  const show = (t, bad) => { msg.hidden = false; msg.className = 'small' + (bad ? ' err' : ''); msg.textContent = t; };
+  const resetBox = h('div',{class:'confirm'});
+  const resetIdle = () => resetBox.replaceChildren(h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:resetAsk},'Сбросить поле'));
+  const resetAsk = () => resetBox.replaceChildren(
+    h('span',{class:'small'},'Вернуть поле к началу? Все ходы, игроки и журнал удалятся. Коды останутся рабочими.'),
+    h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:async()=>{ try { await rpc('g_admin_reset',{p_key:KEY}); show('Поле сброшено.'); setTimeout(load, 600); } catch(err){ show(err.message, true); } }},'Да, сбросить'),
+    h('button',{class:'btn ghost',type:'button',style:'padding:6px 10px;font-size:.8rem;min-height:40px',onclick:resetIdle},'Отмена'));
+  resetIdle();
+  const now = () => { const d = new Date(Date.now() + 8 * 3600e3); return d.toISOString().slice(0, 16); };
+  const f = h('form',{class:'sheet'},
+    h('h2',null,'Игра «Захват сети»: сроки'),
+    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + DATA.gstate.players),
+    h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Новый игровой день начинается в полночь, всего 5 дней с событиями. Чтобы проверить игру заранее — нажмите «Открыть сейчас», а перед настоящим стартом верните дату и сбросьте поле.'),
+    h('div',{class:'row'}, h('label',null,'Старт игры', a), h('label',null,'Финиш игры', b),
+      h('button',{class:'btn ghost',type:'button',onclick:()=>{ a.value = now(); }},'Открыть сейчас'),
+      h('button',{class:'btn',type:'submit'},'Сохранить')),
+    resetBox, msg);
+  f.addEventListener('submit', async (e) => { e.preventDefault();
+    try { await rpc('g_admin_settings',{p_key:KEY,p_starts:fromLocal(a.value),p_ends:fromLocal(b.value)}); show('Сохранено.'); setTimeout(load, 600); }
+    catch(err){ show(/BAD_DATES/.test(err.message) ? 'Финиш должен быть позже старта.' : err.message, true); } });
+  return f;
+}
+function gameView(){
+  const G = DATA.gstate; if (!G) return h('p',{class:'muted'},'Нет данных игры.');
+  const st = G.standings || [], top = G.top || [];
+  return h('div',{style:'display:flex;flex-direction:column;gap:14px'},
+    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Очки — сколько команда приносит сейчас (узлы, связанные с базой, + бонус за цеха).'),
+    h('div',{class:'tbl'}, h('table',null,
+      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Очки'),h('th',null,'Узлов'),h('th',null,'Игроков'))),
+      h('tbody',null, ...st.map((r,i)=>h('tr',{class:i<3&&r.score>0?'top':''}, h('td',{class:'place'},String(i+1)), h('td',null,r.team), h('td',{class:'num'},String(r.score)), h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players))))))),
+    h('div',{class:'tbl'}, h('h2',null,'Лучшие взломщики'), top.length ? h('table',null,
+      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Игрок'),h('th',null,'Команда'),h('th',null,'Захватов'))),
+      h('tbody',null, ...top.map((r,i)=>h('tr',null, h('td',{class:'place'},String(i+1)), h('td',null,r.name), h('td',null,r.team), h('td',{class:'num'},String(r.captures))))))
+      : h('p',{class:'muted small'},'Пока никто ничего не захватил.')));
 }
 
 // ---------- Коды входа в игру ----------
