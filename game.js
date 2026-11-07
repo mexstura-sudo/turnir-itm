@@ -25,8 +25,9 @@
   const GROUPS = 'МР-261 МР-262 МС-26 МШИ-26 НП-26 ПК-26 СП-26 СР-261 СР-262 ТОРА-261 ТОРА-262 ТОРА-263 ТОРА-264 Ш-26 ЭС-26 МР-251 МР-252 МС-25 НП-251 НП-252 П-25 СП-25 ТОРА-251 ТОРА-252 ЭС-25 ТОРА-241 ТОРА-242 СП-23 ТОРА-231 ТОРА-232'.split(' ');
   const TEACHERS = ['Иванова Е. В.', 'Петров С. А.', 'Кузнецова О. Н.', 'Смирнов Д. И.', 'Орлова Т. П.', 'Волков А. Г.', 'Морозова И. С.', 'Лебедев К. М.', 'Никитина Л. А.', 'Захаров В. Н.'];
   const SURN = ['Ковалёв', 'Смирнова', 'Петров', 'Орлова', 'Зуев', 'Белов', 'Тихонова', 'Карпов', 'Лысенко', 'Мухина', 'Гусев', 'Фролова', 'Носков', 'Рябова', 'Шилов', 'Егорова', 'Титов', 'Котова', 'Пахомов', 'Савина'];
-  const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная 2', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская', 'Серверная 1', 'Серверная 3', 'Серверная 4'];
-  // четыре серверные крестом вокруг центра (сверху, слева, снизу, справа): без баз групп; там горячие точки и блэкаут
+  // номера комнат (индексы) общие с сервером: блэкаут — регионы 2, 7, 8, 9, концерт — Актовый зал (3)
+  const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная 1', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская', 'Серверная 2', 'Серверная 3', 'Серверная 4'];
+  // четыре серверные — технический этаж между крылами (номера слева направо): без баз групп; там горячие точки и блэкаут
   const SERVER_ROOMS = [7, 2, 8, 9];
   const T_TEAM = 'Преподаватели', T_COLOR = '#f0b400', T_COLOR2 = '#3b2a00', TI = GROUPS.length; // команда преподавателей — последняя
   const VALUE = { node: 1, server: 3, core: 5, base: 0 };
@@ -101,23 +102,50 @@
     }
     return { closed: 0, opened: 0, hit: [] };
   }
-  function buildMap() {
+  // ---------- планы корпуса ----------
+  // rooms[i] — комната REGIONS[i]: [колонка0, ряд0, колонка1, ряд1, где стоит оборудование x, y (доли комнаты)].
+  // Колонки 0…cols, ряды 0…rows; комнаты вместе покрывают весь корпус без наложений. teach — где база преподавателей
+  // в Учительской (доли комнаты), ent — где вход (номер колонки).
+  const LAYOUTS = {
+    // Два крыла: сверху мастерские, снизу учебная часть (Столовая у входа), посередине технический этаж из четырёх
+    // серверных. Стены серверных сдвинуты относительно стен комнат — каждая комната граничит с двумя серверными.
+    // Выбран по расчёту баланса: до ближайшей серверной 2–6 кабелей, на каждую серверную 6–9 команд, в комнате 4–6 баз.
+    wings: { cols: 18, rows: 15, ent: 15, teach: [0.3, 0.6], rooms: [
+      [0, 0, 6, 5, 0.35, 0.45],       // Автомастерская
+      [6, 0, 12, 5, 0.5, 0.45],       // Сварочный цех
+      [0, 5, 4.5, 9, 0.5, 0.5],       // Серверная 1
+      [0, 9, 6, 15, 0.4, 0.55],       // Актовый зал
+      [12, 0, 18, 5, 0.65, 0.45],     // Швейный цех
+      [12, 9, 18, 15, 0.6, 0.55],     // Столовая
+      [6, 9, 12, 15, 0.5, 0.7],       // Учительская
+      [4.5, 5, 9, 9, 0.5, 0.5],       // Серверная 2
+      [9, 5, 13.5, 9, 0.5, 0.5],      // Серверная 3
+      [13.5, 5, 18, 9, 0.5, 0.5]] },  // Серверная 4
+  };
+  const MAP_LAYOUT = 'wings';
+  function buildMap(layout) {
     rnd = mulberry32(77);
-    const cols = 18, rows = 15, SX = 62, SY = 54, OX = 46, OY = 56;
+    const LY = layout || LAYOUTS[MAP_LAYOUT];
+    const { cols, rows } = LY, SX = 62, SY = 54, OX = 46, OY = 56;
     const bx0 = OX - 34, bx1 = OX + (cols - 1) * SX + SX / 2 + 34, by0 = OY - 34, by1 = OY + (rows - 1) * SY + 32;
-    const yW1 = OY + 3.5 * SY, yW2 = OY + 9.5 * SY, cx = (bx0 + bx1) / 2;
-    // симметрично относительно центра: серверные сверху и снизу шириной 4 колонки, слева и справа — край среднего ряда;
-    // между ними в среднем ряду — Актовый зал и Учительская
-    const xA1 = cx - 2 * SX, xA2 = cx + 2 * SX, xB1 = cx - 4.3 * SX, xB2 = cx + 4.3 * SX, xM = cx, xC1 = xA1, xC2 = xA2;
-    // комнаты: [x0, y0, x1, y1] в порядке REGIONS
-    const rooms = [[bx0, by0, xA1, yW1], [xA2, by0, bx1, yW1], [bx0, yW1, xB1, yW2], [xB1, yW1, xM, yW2], [bx0, yW2, xC1, by1], [xC2, yW2, bx1, by1], [xM, yW1, xB2, yW2], [xA1, by0, xA2, yW1], [xC1, yW2, xC2, by1], [xB2, yW1, bx1, yW2]];
-    const PROP = [[0.3, 0.55], [0.7, 0.52], [0.5, 0.44], [0.45, 0.4], [0.28, 0.52], [0.66, 0.5], [0.62, 0.66], [0.5, 0.3], [0.5, 0.72], [0.5, 0.56]];
-    const regions = rooms.map(([x0, y0, x1, y1], i) => ({ id: i, name: REGIONS[i], x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, px: x0 + (x1 - x0) * PROP[i][0], py: y0 + (y1 - y0) * PROP[i][1] }));
+    // план в клетках: граница колонки k — между узлами соседних колонок, граница ряда k — между рядами
+    const X = (k) => (k <= 0 ? bx0 : k >= cols ? bx1 : OX + (k - 0.25) * SX), Y = (k) => (k <= 0 ? by0 : k >= rows ? by1 : OY + (k - 0.5) * SY);
+    const rooms = REGIONS.map((_, i) => { const [c0, r0, c1, r1] = LY.rooms[i]; return [X(c0), Y(r0), X(c1), Y(r1)]; });
+    const regions = rooms.map(([x0, y0, x1, y1], i) => { const pr = LY.rooms[i].slice(4); const fx = pr[0] == null ? 0.5 : pr[0], fy = pr[1] == null ? 0.5 : pr[1];
+      return { id: i, name: REGIONS[i], x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, px: x0 + (x1 - x0) * fx, py: y0 + (y1 - y0) * fy }; });
     const roomOf = (x, y) => rooms.findIndex(([x0, y0, x1, y1]) => x >= x0 && x < x1 && y >= y0 && y < y1);
+    // стены — общие границы соседних комнат, по одной на каждую пару: кабели проходят только через дверные проёмы
+    const walls = [], EPS = 0.5;
+    rooms.forEach((A, i) => rooms.forEach((B, j) => {
+      if (j <= i) return;
+      if (Math.abs(A[2] - B[0]) < EPS || Math.abs(B[2] - A[0]) < EPS) { const at = Math.abs(A[2] - B[0]) < EPS ? A[2] : A[0], a = Math.max(A[1], B[1]), b = Math.min(A[3], B[3]); if (b - a > EPS) walls.push({ o: 'v', at, a, b, rooms: [i, j] }); }
+      if (Math.abs(A[3] - B[1]) < EPS || Math.abs(B[3] - A[1]) < EPS) { const at = Math.abs(A[3] - B[1]) < EPS ? A[3] : A[1], a = Math.max(A[0], B[0]), b = Math.min(A[2], B[2]); if (b - a > EPS) walls.push({ o: 'h', at, a, b, rooms: [i, j] }); }
+    }));
     let nodes = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      let x = OX + c * SX + (r % 2) * SX / 2 + (rnd() - 0.5) * 16; const y = OY + r * SY + (rnd() - 0.5) * 14;
-      (y < yW1 ? [xA1, xA2] : y < yW2 ? [xB1, xM, xB2] : [xC1, xC2]).forEach((w) => { if (Math.abs(x - w) < 16) x = w + (x < w ? -16 : 16); });
+      let x = OX + c * SX + (r % 2) * SX / 2 + (rnd() - 0.5) * 16; let y = OY + r * SY + (rnd() - 0.5) * 14;
+      walls.forEach((w) => { if (w.o === 'v' && y > w.a && y < w.b && Math.abs(x - w.at) < 16) x = w.at + (x < w.at ? -16 : 16); });
+      walls.forEach((w) => { if (w.o === 'h' && x > w.a && x < w.b && Math.abs(y - w.at) < 13) y = w.at + (y < w.at ? -13 : 13); });
       const region = roomOf(x, y), R = regions[region];
       if (Math.hypot(x - R.px, y - R.py) < 50) continue; // место под оборудование цеха
       nodes.push({ r, c, x, y, region, owner: null, shield: 0, kind: 'node' });
@@ -131,14 +159,12 @@
     let E = linkUp();
     const main = reachFrom(nodes.length, E, Math.floor(nodes.length / 2));
     if (main.size < nodes.length) { nodes = nodes.filter((n) => main.has(n.id)); E = linkUp(); }
-    // стены: кабели проходят только через дверные проёмы
-    const walls = [{ o: 'h', at: yW1, a: bx0, b: bx1 }, { o: 'h', at: yW2, a: bx0, b: bx1 }, { o: 'v', at: xA1, a: by0, b: yW1 }, { o: 'v', at: xA2, a: by0, b: yW1 }, { o: 'v', at: xB1, a: yW1, b: yW2 }, { o: 'v', at: xM, a: yW1, b: yW2 }, { o: 'v', at: xB2, a: yW1, b: yW2 }, { o: 'v', at: xC1, a: yW2, b: by1 }, { o: 'v', at: xC2, a: yW2, b: by1 }];
     const crossing = ([p, q]) => { const A = nodes[p], B = nodes[q]; for (let wi = 0; wi < walls.length; wi++) { const w = walls[wi]; const [ua, ub, va, vb] = w.o === 'h' ? [A.y, B.y, A.x, B.x] : [A.x, B.x, A.y, B.y]; if ((ua - w.at) * (ub - w.at) >= 0) continue; const t = va + (vb - va) * (w.at - ua) / (ub - ua); if (t > w.a && t < w.b) return { wi, t }; } return null; };
     const cr = E.map(crossing), alive = E.map(() => true), adjE = adjOf(nodes.length, E);
-    const plan = { bx0, by0, bx1, by1, ent: (xC2 + bx1) / 2 + 30, walls: walls.map((w) => ({ ...w, gaps: [] })) };
+    const plan = { bx0, by0, bx1, by1, ent: X(LY.ent), walls: walls.map((w) => ({ ...w, gaps: [] })) };
     // база преподавателей — в Учительской, ядра и серверы цехов
     const near = (arr, x, y) => arr.reduce((b, n) => ((n.x - x) ** 2 + (n.y - y) ** 2 < (b.x - x) ** 2 + (b.y - y) ** 2 ? n : b));
-    const TR = regions[6], tBase = near(nodes.filter((n) => n.region === 6), TR.x0 + (TR.x1 - TR.x0) * 0.3, TR.y0 + (TR.y1 - TR.y0) * 0.45);
+    const TR = regions[6], tBase = near(nodes.filter((n) => n.region === 6), TR.x0 + (TR.x1 - TR.x0) * LY.teach[0], TR.y0 + (TR.y1 - TR.y0) * LY.teach[1]);
     tBase.kind = 'base';
     regions.forEach((R) => {
       const inR = nodes.filter((n) => n.region === R.id && n.kind === 'node').sort((a, b) => ((a.x - R.cx) ** 2 + (a.y - R.cy) ** 2) - ((b.x - R.cx) ** 2 + (b.y - R.cy) ** 2));
