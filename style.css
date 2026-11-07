@@ -28,7 +28,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .gears{flex:none;opacity:.9}
 /* ---------- навигация ---------- */
 .navbar{background:linear-gradient(#efe6cb,#ddd2b1);border-bottom:2px solid var(--bevel-lo)}
-.navbar-in{max-width:1100px;margin:0 auto;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:10px;justify-content:center;overflow-x:auto}
+.navbar-in{max-width:1100px;margin:0 auto;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:10px;justify-content:flex-start;overflow-x:auto}
 .key{font:var(--display-w) .92rem var(--font-display);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:linear-gradient(var(--bevel-hi),var(--key));border:2px solid var(--key-dk);border-radius:6px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18),0 2px 0 var(--key-dk);padding:8px 16px;cursor:pointer;white-space:nowrap;touch-action:manipulation}
 .key[aria-pressed="true"],.key:active{background:linear-gradient(var(--key),#c9c1a8);box-shadow:inset 0 2px 3px rgba(0,0,0,.25);transform:translateY(1px)}
 /* ---------- корпус ---------- */
@@ -42,7 +42,7 @@ main{flex:1;width:100%;max-width:1100px;margin:0 auto;padding-block:16px 28px;pa
 .screen{background:#2d2c27;border-radius:14px;padding:10px;box-shadow:inset 0 0 0 3px #1c1b17,0 3px 0 rgba(0,0,0,.15)}
 .screen>.glass{background:radial-gradient(ellipse at center,#fdf7e4 55%,#efe5c6);border-radius:22px/16px;padding:20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .hero-txt{flex:1 1 260px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.robot{flex:none;width:112px;height:auto;image-rendering:pixelated}
+.robot{flex:none;width:142px;height:auto;image-rendering:pixelated}
 h1,h2,h3{font-family:var(--font-display);font-weight:var(--display-w);text-wrap:balance;margin:0;letter-spacing:var(--display-ls);text-transform:uppercase}
 h1{font-size:clamp(1.3rem,4vw,1.9rem);line-height:1.15}
 h2{font-size:1.15rem;line-height:1.25}
@@ -171,6 +171,8 @@ pre.code{margin:0;font:500 .9rem/1.55 var(--font-mono);background:var(--lcd-bg);
 .modal{position:fixed;inset:0;background:rgba(31,61,45,.6);display:grid;place-items:end center;z-index:20;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom,0px))}
 .modal>.sheet{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
 .modal .sheet{max-width:520px;width:100%}
+/* содержимое окна не сжимается (иначе таблица задачи схлопывается в одну строку) — прокручивается само окно */
+.modal>.sheet>*{flex-shrink:0}
 .score{font:var(--display-w) 4rem/1 var(--font-display);display:flex;align-items:baseline;gap:10px;color:var(--lcd);background:var(--lcd-bg);padding:14px 16px;border-radius:8px;text-shadow:0 0 8px rgba(134,242,154,.6)}
 .score small{font:700 .95rem var(--font-mono);color:#bfe8c6;text-shadow:none}
 .kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-variant-numeric:tabular-nums;margin:0}
@@ -258,7 +260,7 @@ pre.code{margin:0;font:500 .9rem/1.55 var(--font-mono);background:var(--lcd-bg);
 .screen>.glass{position:relative;overflow:hidden;box-shadow:inset 0 0 40px rgba(80,60,20,.25),inset 0 0 0 2px rgba(0,0,0,.25)}
 .screen>.glass::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(rgba(60,40,10,.045) 0 1px,transparent 1px 3px),linear-gradient(115deg,rgba(255,255,255,.35),transparent 30%)}
 .screen::after{content:"POWER";position:absolute;right:16px;bottom:-1px;font:700 .55rem var(--font-body);letter-spacing:.2em;color:#9d9682;padding-left:14px;background:radial-gradient(circle at 4px 50%,#86f29a 0 3px,transparent 3.5px) no-repeat}
-.robot{width:150px}
+.robot{width:192px}
 .sevenseg{width:100%;height:auto;display:block}
 .sevenseg .seg-on{fill:var(--lcd);filter:drop-shadow(0 0 2px rgba(134,242,154,.9))}
 .sevenseg .seg-off{fill:var(--lcd);opacity:.07}
@@ -298,8 +300,8 @@ pre.code{margin:0;font:500 .9rem/1.55 var(--font-mono);background:var(--lcd-bg);
 .r-wave{animation:wave 1.2s ease-in-out infinite;transform-box:fill-box}
 @keyframes wave{0%,100%{transform:translateY(-2px)}50%{transform:translateY(2px)}}
 .r-led{animation:blink 1s steps(1) infinite}.r-led.l2{animation-delay:.33s}.r-led.l3{animation-delay:.66s}
-.r-arm{transform-box:view-box;transform-origin:28px 22px;animation:armw 2.6s ease-in-out infinite}
-@keyframes armw{0%,100%{transform:rotate(0)}50%{transform:rotate(-7deg)}}
+.r-arm{transform-box:view-box;transform-origin:28px 32px;animation:armw 2.6s ease-in-out infinite}
+@keyframes armw{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
 .seg-colon{animation:blink 1s steps(1) infinite}
 .meter{width:100%;height:auto}
 .needle{animation:needle 3.8s ease-in-out infinite}
@@ -307,13 +309,27 @@ pre.code{margin:0;font:500 .9rem/1.55 var(--font-mono);background:var(--lcd-bg);
 .meter-lbl{font:600 11px var(--font-display);fill:#6f6a55}
 .topic:hover .tbar svg,.topic:focus-within .tbar svg{animation:wig .6s}
 @keyframes wig{25%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}}
-@media (max-width:640px){.pcard,.gears{display:none}.masthead-in{padding-block:10px}.robot{width:110px}}
+@media (max-width:640px){.pcard,.gears{display:none}.masthead-in{padding-block:10px}.robot{width:140px}}
 @media (prefers-reduced-motion:reduce){.dir-arrow,.g-cw,.g-ccw,.tube-glow,.blink,.ticker-in span,.r-eyes,.r-ant,.r-wave,.r-led,.r-arm,.seg-colon,.pulse,.reel-a,.reel-b,.led-a,.led-b,.led-c,.needle{animation:none}}
 @media (prefers-reduced-motion:reduce){.flash,.spin,.cell.hit{animation:none}.lamp .bulb,.sw .k::after{transition:none}}
 .gamecode{border-color:var(--accent-dk)}
-.gc-code{user-select:all;-webkit-user-select:all;font:700 clamp(1.6rem,7vw,2.2rem) var(--font-mono);letter-spacing:.14em;text-align:center;background:var(--lcd-bg);color:var(--lcd);border-radius:8px;padding:14px 10px;text-shadow:0 0 8px rgba(134,242,154,.6);user-select:all}
+.gc-code{user-select:all;-webkit-user-select:all;font:700 clamp(1.15rem,5.4vw,2rem) var(--font-mono);letter-spacing:.08em;white-space:nowrap;text-align:center;background:var(--lcd-bg);color:var(--lcd);border-radius:8px;padding:14px 10px;text-shadow:0 0 8px rgba(134,242,154,.6);user-select:all}
 /* очень узкие телефоны (320–359 px): больше места под задания */
 @media (max-width:359px){
   main{padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px))}
   .sheet{padding:12px}
 }
+
+/* ---------- ссылка и карточка игры «Захват сети ИТМ» ---------- */
+a.key{display:inline-block;text-decoration:none}
+.key-game{background:linear-gradient(#2b4a33,var(--lcd-bg));color:var(--lcd);border-color:#091209;box-shadow:inset 0 -3px 0 rgba(0,0,0,.35),0 2px 0 #091209;text-shadow:0 0 6px rgba(134,242,154,.55)}
+.key-game:active{background:var(--lcd-bg)}
+.gamecard{background:linear-gradient(#45433a,#33312a);border:2px solid #1c1b17;border-radius:10px;padding:10px;display:grid;gap:10px;box-shadow:inset 0 0 0 3px #26251f}
+.gamecard .lcd{font-size:clamp(1.3rem,5.4vw,1.9rem);padding:10px 12px}
+.gc-body{background:var(--paper);border-radius:6px;padding:14px;display:grid;gap:10px;justify-items:start}
+.gc-when{margin:0;font:var(--display-w) 1.02rem var(--font-display);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-dk)}
+.gc-txt{margin:0}
+.gamecard a.btn{display:block;text-align:center;text-decoration:none;max-width:320px}
+/* меню: по центру, а если не влезает — прокрутка без обрезанной первой кнопки */
+.navbar-in>:first-child{margin-left:auto}.navbar-in>:last-child{margin-right:auto}
+@media (max-width:480px){.navbar-in{gap:6px}.navbar-in .key{padding:8px 10px;font-size:.82rem;letter-spacing:.03em}}

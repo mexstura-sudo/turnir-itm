@@ -12,7 +12,7 @@
   const LIVE = !!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase);
   const sb = LIVE ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: false } }) : null;
   async function rpc(fn, args) { const { data, error } = await sb.rpc(fn, args); if (error) throw new Error(error.message || 'NETWORK'); return data; }
-  const ERR = { BAD_CODE: 'Такого кода нет. Он выдаётся после олимпиады — проверьте цифры.', NOT_STARTED: 'Игра ещё не началась — дата старта во вкладке «Правила».', ENDED: 'Игра завершена.', NOT_ALLOWED: 'Этот узел сейчас недоступен — карта успела измениться.', NO_ENERGY: 'Не хватает энергии.', NO_TASK: 'Задача устарела — откройте узел заново.', NO_TEAM: 'Команда не найдена — напишите организатору.' };
+  const ERR = { BAD_CODE: 'Такого кода нет. Он выдаётся после олимпиады — проверьте цифры.', NOT_STARTED: 'Игра ещё не началась — дата старта во вкладке «Правила».', ENDED: 'Игра завершена.', NOT_ALLOWED: 'Этот узел сейчас недоступен — карта успела измениться.', NO_ENERGY: 'Не хватает энергии.', NO_TASK: 'Задача устарела — откройте узел заново.', NO_TEAM: 'Команда не найдена — напишите организатору.', RELOGIN: 'Сессия устарела — откройте игру заново.' };
   const errText = (e) => { const m = String((e && e.message) || e); const k = Object.keys(ERR).find((x) => m.includes(x)); return k ? ERR[k] : 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.'; };
   const irkMin = (ms) => { const d = new Date(ms); return ((d.getUTCHours() + 8) % 24) * 60 + d.getUTCMinutes(); };
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
@@ -25,21 +25,23 @@
   const GROUPS = 'МР-261 МР-262 МС-26 МШИ-26 НП-26 ПК-26 СП-26 СР-261 СР-262 ТОРА-261 ТОРА-262 ТОРА-263 ТОРА-264 Ш-26 ЭС-26 МР-251 МР-252 МС-25 НП-251 НП-252 П-25 СП-25 ТОРА-251 ТОРА-252 ЭС-25 ТОРА-241 ТОРА-242 СП-23 ТОРА-231 ТОРА-232'.split(' ');
   const TEACHERS = ['Иванова Е. В.', 'Петров С. А.', 'Кузнецова О. Н.', 'Смирнов Д. И.', 'Орлова Т. П.', 'Волков А. Г.', 'Морозова И. С.', 'Лебедев К. М.', 'Никитина Л. А.', 'Захаров В. Н.'];
   const SURN = ['Ковалёв', 'Смирнова', 'Петров', 'Орлова', 'Зуев', 'Белов', 'Тихонова', 'Карпов', 'Лысенко', 'Мухина', 'Гусев', 'Фролова', 'Носков', 'Рябова', 'Шилов', 'Егорова', 'Титов', 'Котова', 'Пахомов', 'Савина'];
-  const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская'];
-  const T_TEAM = 'Преподаватели', T_COLOR = '#c99a06', TI = GROUPS.length; // команда преподавателей — последняя
+  const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная 2', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская', 'Серверная 1', 'Серверная 3', 'Серверная 4'];
+  // четыре серверные крестом вокруг центра (сверху, слева, снизу, справа): без баз групп; там горячие точки и блэкаут
+  const SERVER_ROOMS = [7, 2, 8, 9];
+  const T_TEAM = 'Преподаватели', T_COLOR = '#f0b400', T_COLOR2 = '#3b2a00', TI = GROUPS.length; // команда преподавателей — последняя
   const VALUE = { node: 1, server: 3, core: 5, base: 0 };
   // неделя турнира: 5 дней, каждый день — событие, которое переворачивает поле
   const DAYS = [
     null,
-    { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡ — нужна только задача. Занимайте территорию, пока она ничья.', captureFree: true, hot: 0 },
-    { t: 'Блэкаут в Серверной', d: 'Ночью пропало питание: все узлы Серверной снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', region: 2, serverX: 2, hot: 5 },
-    { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно.', flip: 'doors', fortifyFree: true, hot: 4 },
-    { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 3 },
-    { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 6 },
+    { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡: вместо задачи — короткая мини-игра, проигрыш ничего не стоит. Занимайте территорию, пока она ничья.', captureFree: true, hot: 7 },
+    { t: 'Блэкаут в серверных', d: 'Ночью пропало питание: все узлы четырёх серверных снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', regions: SERVER_ROOMS, serverX: 2, hot: 9 },
+    { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно: вместо задачи — мини-игра.', flip: 'doors', fortifyFree: true, hot: 8 },
+    { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
+    { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 7 },
   ];
   const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6; // демо: финал в 22:00 пятого дня; энергия копится до 6
   // даты игры берутся с сервера (пульт → «Игра: сроки»); в демо — 9–13 ноября
-  const DEF_START = Date.UTC(2026, 10, 8, 16, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
+  const DEF_START = Date.UTC(2026, 10, 9, 0, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
   const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   const fmtIrk = (d) => ({ text: d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()], short: d.getUTCDate() + '.' + String(d.getUTCMonth() + 1).padStart(2, '0'), wd: WDAYS[d.getUTCDay()], hm: String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'), key: d.toISOString().slice(0, 10) });
   const atIrk = (ms) => fmtIrk(new Date(ms + 8 * 3600e3));
@@ -51,7 +53,23 @@
   const evText = (ev, day) => String(ev.d || '').replace('{final}', finalText(day));
   const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   // группы — от зелёного до малинового; жёлто-оранжевый и красный оставлены преподавателям и значкам атаки
-  const teamColor = (i, n) => `hsl(${Math.round(78 + ((i * 11) % n) * (272 / n))} ${i % 2 ? 50 : 62}% ${i % 3 === 0 ? 42 : i % 3 === 1 ? 52 : 34}%)`;
+  // цвета команд: основной цвет + второй (точка в узле, полоса на кабеле, крыша базы). 10 × 3 = 30 сочетаний — по одному на группу;
+  // соседним базам достаются разные основные цвета.
+  const MAINS = ['#e03131', '#f76707', '#94c11f', '#2b8a3e', '#0b98b8', '#1c4fd8', '#7b2ff7', '#c2255c', '#8d5524', '#f783ac'];
+  const LIGHT_MAIN = new Set(['#f76707', '#94c11f', '#f783ac']);
+  const accentsOf = (m) => ['#ffffff', '#1d1d1b', LIGHT_MAIN.has(m) ? '#1c4fd8' : '#ffd43b'];
+  function paintTeams(teams, nodes) {
+    const combos = []; MAINS.forEach((m, mi) => accentsOf(m).forEach((a, ai) => combos.push({ m, a, mi, ai })));
+    const tb = nodes[teams.find((t) => t.teach).base], used = new Set(), done = [];
+    teams.filter((t) => !t.teach).map((t) => ({ t, n: nodes[t.base] }))
+      .sort((p, q) => Math.hypot(p.n.x - tb.x, p.n.y - tb.y) - Math.hypot(q.n.x - tb.x, q.n.y - tb.y))
+      .forEach(({ t, n }) => {
+        let best = 0, bp = Infinity;
+        combos.forEach((c, ci) => { if (used.has(ci)) return; let p = 0; done.forEach((o) => { const w = Math.exp(-Math.hypot(o.n.x - n.x, o.n.y - n.y) / 220); p += w * ((o.c.mi === c.mi ? 4 : 0) + (o.c.ai === c.ai ? 1 : 0)); }); if (p < bp - 1e-9) { bp = p; best = ci; } });
+        used.add(best); const c = combos[best]; t.color = c.m; t.color2 = c.a; done.push({ n, c });
+      });
+  }
+  const swatchStyle = (t) => `background:linear-gradient(135deg,${t.color} 0 56%,${t.color2} 56%)`;
 
   // ---------- карта: план учебного корпуса ----------
   const adjOf = (N, E) => { const a = Array.from({ length: N }, () => []); E.forEach(([x, y]) => { a[x].push(y); a[y].push(x); }); return a; };
@@ -70,10 +88,11 @@
     for (let attempt = 0; attempt < 40; attempt++) {
       const next = new Set();
       L.plan.walls.forEach((w, wi) => {
-        const onW = L.pool.filter((d) => d.wi === wi), o = shuffle(onW.filter((d) => open.has(d.k))), c = shuffle(onW.filter((d) => !open.has(d.k)));
+        const onW = L.pool.filter((d) => d.wi === wi && !L.locked.has(d.k)), o = shuffle(onW.filter((d) => open.has(d.k))), c = shuffle(onW.filter((d) => !open.has(d.k)));
         const keep = o.slice(0, Math.floor(o.length / 2)), add = c.slice(0, Math.max(2, o.length - keep.length));
         keep.concat(add).forEach((d) => next.add(d.k));
       });
+      L.locked.forEach((k) => next.add(k)); // выходы с баз не закладывают
       const E = L.fixed.concat(L.pool.filter((d) => next.has(d.k)).map((d) => [d.a, d.b]));
       if (reachFrom(L.nodes.length, E, 0).size < L.nodes.length) continue;
       const changed = L.pool.filter((d) => open.has(d.k) !== next.has(d.k));
@@ -84,19 +103,21 @@
   }
   function buildMap() {
     rnd = mulberry32(77);
-    const cols = 12, rows = 13, SX = 62, SY = 54, OX = 46, OY = 56;
+    const cols = 18, rows = 15, SX = 62, SY = 54, OX = 46, OY = 56;
     const bx0 = OX - 34, bx1 = OX + (cols - 1) * SX + SX / 2 + 34, by0 = OY - 34, by1 = OY + (rows - 1) * SY + 32;
-    const yW1 = OY + 3.5 * SY, yW2 = OY + 8.5 * SY, vx = (c) => OX + c * SX + SX / 4;
-    const xA = vx(5), xB1 = vx(3), xB2 = vx(8), xC = vx(6);
+    const yW1 = OY + 3.5 * SY, yW2 = OY + 9.5 * SY, cx = (bx0 + bx1) / 2;
+    // симметрично относительно центра: серверные сверху и снизу шириной 4 колонки, слева и справа — край среднего ряда;
+    // между ними в среднем ряду — Актовый зал и Учительская
+    const xA1 = cx - 2 * SX, xA2 = cx + 2 * SX, xB1 = cx - 4.3 * SX, xB2 = cx + 4.3 * SX, xM = cx, xC1 = xA1, xC2 = xA2;
     // комнаты: [x0, y0, x1, y1] в порядке REGIONS
-    const rooms = [[bx0, by0, xA, yW1], [xA, by0, bx1, yW1], [bx0, yW1, xB1, yW2], [xB2, yW1, bx1, yW2], [bx0, yW2, xC, by1], [xC, yW2, bx1, by1], [xB1, yW1, xB2, yW2]];
-    const PROP = [[0.3, 0.55], [0.7, 0.52], [0.5, 0.44], [0.55, 0.56], [0.28, 0.52], [0.66, 0.5], [0.3, 0.33]];
+    const rooms = [[bx0, by0, xA1, yW1], [xA2, by0, bx1, yW1], [bx0, yW1, xB1, yW2], [xB1, yW1, xM, yW2], [bx0, yW2, xC1, by1], [xC2, yW2, bx1, by1], [xM, yW1, xB2, yW2], [xA1, by0, xA2, yW1], [xC1, yW2, xC2, by1], [xB2, yW1, bx1, yW2]];
+    const PROP = [[0.3, 0.55], [0.7, 0.52], [0.5, 0.44], [0.45, 0.4], [0.28, 0.52], [0.66, 0.5], [0.62, 0.66], [0.5, 0.3], [0.5, 0.72], [0.5, 0.56]];
     const regions = rooms.map(([x0, y0, x1, y1], i) => ({ id: i, name: REGIONS[i], x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, px: x0 + (x1 - x0) * PROP[i][0], py: y0 + (y1 - y0) * PROP[i][1] }));
     const roomOf = (x, y) => rooms.findIndex(([x0, y0, x1, y1]) => x >= x0 && x < x1 && y >= y0 && y < y1);
     let nodes = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       let x = OX + c * SX + (r % 2) * SX / 2 + (rnd() - 0.5) * 16; const y = OY + r * SY + (rnd() - 0.5) * 14;
-      (y < yW1 ? [xA] : y < yW2 ? [xB1, xB2] : [xC]).forEach((w) => { if (Math.abs(x - w) < 16) x = w + (x < w ? -16 : 16); });
+      (y < yW1 ? [xA1, xA2] : y < yW2 ? [xB1, xM, xB2] : [xC1, xC2]).forEach((w) => { if (Math.abs(x - w) < 16) x = w + (x < w ? -16 : 16); });
       const region = roomOf(x, y), R = regions[region];
       if (Math.hypot(x - R.px, y - R.py) < 50) continue; // место под оборудование цеха
       nodes.push({ r, c, x, y, region, owner: null, shield: 0, kind: 'node' });
@@ -111,34 +132,70 @@
     const main = reachFrom(nodes.length, E, Math.floor(nodes.length / 2));
     if (main.size < nodes.length) { nodes = nodes.filter((n) => main.has(n.id)); E = linkUp(); }
     // стены: кабели проходят только через дверные проёмы
-    const walls = [{ o: 'h', at: yW1, a: bx0, b: bx1 }, { o: 'h', at: yW2, a: bx0, b: bx1 }, { o: 'v', at: xA, a: by0, b: yW1 }, { o: 'v', at: xB1, a: yW1, b: yW2 }, { o: 'v', at: xB2, a: yW1, b: yW2 }, { o: 'v', at: xC, a: yW2, b: by1 }];
+    const walls = [{ o: 'h', at: yW1, a: bx0, b: bx1 }, { o: 'h', at: yW2, a: bx0, b: bx1 }, { o: 'v', at: xA1, a: by0, b: yW1 }, { o: 'v', at: xA2, a: by0, b: yW1 }, { o: 'v', at: xB1, a: yW1, b: yW2 }, { o: 'v', at: xM, a: yW1, b: yW2 }, { o: 'v', at: xB2, a: yW1, b: yW2 }, { o: 'v', at: xC1, a: yW2, b: by1 }, { o: 'v', at: xC2, a: yW2, b: by1 }];
     const crossing = ([p, q]) => { const A = nodes[p], B = nodes[q]; for (let wi = 0; wi < walls.length; wi++) { const w = walls[wi]; const [ua, ub, va, vb] = w.o === 'h' ? [A.y, B.y, A.x, B.x] : [A.x, B.x, A.y, B.y]; if ((ua - w.at) * (ub - w.at) >= 0) continue; const t = va + (vb - va) * (w.at - ua) / (ub - ua); if (t > w.a && t < w.b) return { wi, t }; } return null; };
-    const cr = E.map(crossing), alive = E.map(() => true), perWall = walls.map(() => 0); cr.forEach((c) => c && perWall[c.wi]++);
-    const pool = E.map((e, i) => (cr[i] ? { a: e[0], b: e[1], k: ekey(e[0], e[1]), wi: cr[i].wi, t: cr[i].t } : null)).filter(Boolean);
-    const order = shuffle(E.map((_, i) => i));
-    order.forEach((i) => {
-      const c = cr[i]; if (rnd() >= (c ? 0.7 : 0.16)) return; if (c && perWall[c.wi] <= 3) return;
-      alive[i] = false; if (reachFrom(nodes.length, E.filter((_, k) => alive[k]), 0).size < nodes.length) { alive[i] = true; return; }
-      if (c) perWall[c.wi]--;
-    });
-    const fixed = E.filter((_, i) => alive[i] && !cr[i]), openDoors = new Set(E.filter((_, i) => alive[i] && cr[i]).map(([a, b]) => ekey(a, b)));
-    const plan = { bx0, by0, bx1, by1, ent: (xC + bx1) / 2 + 30, walls: walls.map((w) => ({ ...w, gaps: [] })) };
+    const cr = E.map(crossing), alive = E.map(() => true), adjE = adjOf(nodes.length, E);
+    const plan = { bx0, by0, bx1, by1, ent: (xC2 + bx1) / 2 + 30, walls: walls.map((w) => ({ ...w, gaps: [] })) };
     // база преподавателей — в Учительской, ядра и серверы цехов
     const near = (arr, x, y) => arr.reduce((b, n) => ((n.x - x) ** 2 + (n.y - y) ** 2 < (b.x - x) ** 2 + (b.y - y) ** 2 ? n : b));
-    const TR = regions[6], tBase = near(nodes.filter((n) => n.region === 6), TR.x0 + (TR.x1 - TR.x0) * 0.68, TR.y0 + (TR.y1 - TR.y0) * 0.64);
+    const TR = regions[6], tBase = near(nodes.filter((n) => n.region === 6), TR.x0 + (TR.x1 - TR.x0) * 0.3, TR.y0 + (TR.y1 - TR.y0) * 0.45);
     tBase.kind = 'base';
     regions.forEach((R) => {
       const inR = nodes.filter((n) => n.region === R.id && n.kind === 'node').sort((a, b) => ((a.x - R.cx) ** 2 + (a.y - R.cy) ** 2) - ((b.x - R.cx) ** 2 + (b.y - R.cy) ** 2));
       const core = R.id === 6 ? inR[inR.length - 1] : inR[0]; if (core) core.kind = 'core';
       inR.slice(3).filter((n, k) => k % 5 === 2 && n.kind === 'node').slice(0, 2).forEach((n) => (n.kind = 'server'));
     });
-    const teams = GROUPS.map((name, i) => ({ id: i, name, color: teamColor(i, GROUPS.length), base: -1, members: ri(7, 24), captures: 0 }));
-    teams.push({ id: TI, name: T_TEAM, color: T_COLOR, base: tBase.id, members: 26, captures: 0, teach: true });
-    tBase.owner = TI;
-    // базы групп — максимально далеко друг от друга
-    const free = nodes.filter((n) => n.kind === 'node'), chosen = [tBase];
-    for (let i = 0; i < GROUPS.length; i++) { let best = null, bd = -1; free.forEach((n) => { if (n.kind !== 'node') return; const d = Math.min(...chosen.map((m) => (n.x - m.x) ** 2 + (n.y - m.y) ** 2)); if (d > bd) { bd = d; best = n; } }); best.kind = 'base'; best.owner = i; teams[i].base = best.id; chosen.push(best); }
-    const L = { nodes, teams, regions, plan, pool, poolKeys: new Set(pool.map((d) => d.k)), fixed, edges: [], adj: [], hot: null, leaders: [], log: [], hackers: {} };
+    // базы групп — максимально далеко друг от друга. У каждой базы ровно три выхода: лучше кабели внутри цеха и в разные
+    // стороны; если нужна дверь — её не закладывают при ремонте. Базы не соседствуют, «домашние» узлы у команд не общие.
+    const baseSet = new Set(), usedHome = new Set(), blocked = new Set(), exitsOf = new Map(), chosen = [], baseNodes = [], locked = new Set();
+    const otherEnd = (i, b) => (E[i][0] === b.id ? E[i][1] : E[i][0]);
+    const pickExits = (b) => {
+      const inc = E.map((_, i) => i).filter((i) => { if (E[i][0] !== b.id && E[i][1] !== b.id) return false; const o = otherEnd(i, b); return !baseSet.has(o) && !usedHome.has(o) && nodes[o].kind === 'node' && !SERVER_ROOMS.includes(nodes[o].region); }); // домашние — обычные узлы вне серверных
+      const ang = (i) => { const o = nodes[otherEnd(i, b)]; return Math.atan2(o.y - b.y, o.x - b.x); };
+      let best = null, bs = -Infinity;
+      for (let x = 0; x < inc.length; x++) for (let y = x + 1; y < inc.length; y++) for (let z = y + 1; z < inc.length; z++) {
+        const tri = [inc[x], inc[y], inc[z]], a = tri.map(ang).sort((p, q) => p - q);
+        const sc = -10 * tri.filter((i) => cr[i]).length + Math.min(a[1] - a[0], a[2] - a[1], 2 * Math.PI - (a[2] - a[0]));
+        if (sc > bs) { bs = sc; best = tri; }
+      }
+      return best;
+    };
+    const addBase = (b, tri) => { b.kind = 'base'; baseSet.add(b.id); chosen.push(b); blocked.add(b.id); adjE[b.id].forEach((v) => blocked.add(v)); tri.forEach((i) => usedHome.add(otherEnd(i, b))); exitsOf.set(b.id, tri); };
+    // жадная расстановка «как можно дальше друг от друга»; если не уместилось — повтор с небольшим случайным разбросом
+    for (let attempt = 0; ; attempt++) {
+      baseNodes.forEach((n) => { n.kind = 'node'; }); [baseSet, usedHome, blocked].forEach((x) => x.clear()); exitsOf.clear(); chosen.length = 0; baseNodes.length = 0;
+      const jr = mulberry32(500 + attempt), jit = attempt ? 0.6 : 0;
+      addBase(tBase, pickExits(tBase));
+      let ok = true;
+      for (let i = 0; i < GROUPS.length && ok; i++) {
+        let best = null, bd = -1, bt = null;
+        nodes.forEach((n) => { if (n.kind !== 'node' || blocked.has(n.id) || SERVER_ROOMS.includes(n.region)) return; const d = Math.min(...chosen.map((m) => (n.x - m.x) ** 2 + (n.y - m.y) ** 2)) * (1 + jit * (jr() - 0.5)); if (d <= bd) return; const tri = pickExits(n); if (tri) { bd = d; best = n; bt = tri; } });
+        if (!best) ok = false; else { addBase(best, bt); baseNodes.push(best); }
+      }
+      if (ok) break;
+      if (attempt > 300) throw new Error('не удалось расставить базы: ' + baseNodes.length + ' из ' + GROUPS.length);
+    }
+    const baseEdge = E.map(([a, b]) => baseSet.has(a) || baseSet.has(b));
+    baseEdge.forEach((v, i) => { if (v) alive[i] = false; });
+    exitsOf.forEach((tri) => tri.forEach((i) => { alive[i] = true; if (cr[i]) locked.add(ekey(E[i][0], E[i][1])); }));
+    const perWall = walls.map(() => 0); cr.forEach((c, i) => c && alive[i] && perWall[c.wi]++);
+    const order = shuffle(E.map((_, i) => i));
+    order.forEach((i) => {
+      const c = cr[i]; if (rnd() >= (c ? 0.7 : 0.16)) return; if (baseEdge[i]) return; if (c && perWall[c.wi] <= 3) return;
+      alive[i] = false; if (reachFrom(nodes.length, E.filter((_, k) => alive[k]), 0).size < nodes.length) { alive[i] = true; return; }
+      if (c) perWall[c.wi]--;
+    });
+    // двери: все проёмы, кроме лишних выходов с баз
+    const pool = E.map((e, i) => (cr[i] && (!baseEdge[i] || alive[i]) ? { a: e[0], b: e[1], k: ekey(e[0], e[1]), wi: cr[i].wi, t: cr[i].t } : null)).filter(Boolean);
+    const fixed = E.filter((_, i) => alive[i] && !cr[i]), openDoors = new Set(E.filter((_, i) => alive[i] && cr[i]).map(([a, b]) => ekey(a, b)));
+    const teams = GROUPS.map((name, i) => ({ id: i, name, color: '', color2: '', base: baseNodes[i].id, members: ri(7, 24), captures: 0 }));
+    teams.push({ id: TI, name: T_TEAM, color: T_COLOR, color2: T_COLOR2, base: tBase.id, members: 26, captures: 0, teach: true });
+    tBase.owner = TI; baseNodes.forEach((n, i) => { n.owner = i; });
+    // «домашние» узлы — три соседа базы: задачи на них по специальности этой группы
+    teams.forEach((t, ti) => E.forEach(([a, b], k) => { if (!alive[k]) return; if (a === t.base) nodes[b].home = ti; else if (b === t.base) nodes[a].home = ti; }));
+    paintTeams(teams, nodes);
+    const L = { nodes, teams, regions, plan, pool, poolKeys: new Set(pool.map((d) => d.k)), locked, fixed, edges: [], adj: [], hot: null, leaders: [], log: [], hackers: {} };
+    L.doors1 = openDoors; // двери первого дня — с ними сравнивается ремонт в среду
     setDoors(L, openDoors);
     return L;
   }
@@ -195,7 +252,7 @@
     if (rnd() > (action === 'attack' ? 0.65 : 0.82)) return null;
     const prev = apply(L, n, t, action, who);
     const entry = { day: G.day, t, who, action, node: n.id, prev, time: Date.now() };
-    L.log.unshift(entry); if (L.log.length > 120) L.log.length = 120;
+    L.log.unshift(entry); L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     return entry;
   }
   function botDay(G, L, intensity) {
@@ -208,7 +265,7 @@
   function dayFlip(L, day) {
     const ev = DAYS[day], out = { day, hit: [], lines: [] };
     if (L.yday && G.me) out.lines.push(`В копилку за вчера: +${L.yday[G.me.team] || 0} очк. (всего ${(L.banked && L.banked[G.me.team]) || 0})`);
-    if (ev.flip === 'blackout') { L.nodes.forEach((n) => { if (n.region === ev.region && n.kind !== 'base' && (n.owner != null || n.shield)) { n.owner = null; n.shield = 0; out.hit.push(n.id); } }); out.lines.push(`Освобождено узлов в Серверной: ${out.hit.length}`); }
+    if (ev.flip === 'blackout') { L.nodes.forEach((n) => { if (ev.regions.includes(n.region) && n.kind !== 'base' && (n.owner != null || n.shield)) { n.owner = null; n.shield = 0; out.hit.push(n.id); } }); out.lines.push(`Освобождено узлов в серверных: ${out.hit.length}`); }
     if (ev.flip === 'doors') { const r = rewireDoors(L); out.hit = r.hit; out.lines.push(`Заложено проёмов: ${r.closed}, прорублено новых: ${r.opened}`); }
     if (ev.flip === 'leaders') { L.leaders = standings(L).slice(0, 3).map((r) => r.i); L.nodes.forEach((n) => { if (L.leaders.includes(n.owner) && n.shield) { n.shield = 0; out.hit.push(n.id); } }); out.lines.push('Под прожектором: ' + L.leaders.map((t) => L.teams[t].name).join(', ')); }
     else L.leaders = [];
@@ -239,7 +296,7 @@
   function startDemo(asTeacher) {
     const L = G.L = buildMap();
     const myTeam = asTeacher ? TI : GROUPS.indexOf('ТОРА-231');
-    G.me = asTeacher ? { name: 'Петрова А. С.', teacher: true, team: myTeam, energy: 11, captures: 0, code: 'ИТМ-0000-01', score: 168 } : { name: 'Ковалёв Дмитрий', team: myTeam, energy: 13, captures: 0, code: 'ИТМ-7203-19', score: 190 };
+    G.me = asTeacher ? { name: 'Петрова А. С.', teacher: true, team: myTeam, energy: 11, captures: 0, code: 'ИТМ-0000-0001', score: 168 } : { name: 'Ковалёв Дмитрий', team: myTeam, energy: 13, captures: 0, code: 'ИТМ-7203-1958', score: 190 };
     rnd = mulberry32(4242);
     G.day = 1; G.clock = 9 * 60; G.over = false; dayFlip(L, 1);
     for (let k = 0, done = 0; k < 12 && done < 3; k++) if (botAction(G, L, myTeam, asTeacher ? pick(TEACHERS) : pick(SURN))) done++; // одногруппники уже начали
@@ -264,9 +321,22 @@
     case 'robot': return robotOk(ans, sub);
   } } catch (e) {} return false; }
   const QUICK = new Set(['bits', 'choice', 'logic', 'spot', 'match', 'bins', 'rows', 'number', 'text']);
-  function pickTask(action, n) {
-    const pool = action === 'attack' ? (n.shield >= 2 ? 'boss' : 'medium') : 'easy';
-    const list = DEMO_TASKS.filter((v) => v.pool === pool && QUICK.has(v.type));
+  // специальность группы по названию (как t_groups → t_specialties на сервере)
+  const PROF = { ТОРА: 'auto', МР: 'auto', СР: 'auto', СП: 'weld', ЭС: 'weld', НП: 'it', МС: 'zhkh', МШИ: 'sew', Ш: 'sew', ПК: 'cook', П: 'cook' };
+  const PROF_NAME = { auto: 'автосервис', weld: 'сварка', it: 'IT', zhkh: 'ЖКХ', sew: 'швейное дело', cook: 'кулинария' };
+  const profOf = (L, t) => (t == null || L.teams[t].teach ? null : PROF[L.teams[t].name.split('-')[0]] || null);
+  // какая задача выпадет (то же правило, что g_task на сервере)
+  function taskKind(L, n, action, team) {
+    if (action === 'attack' && n.shield >= 2) return { pool: 'boss', spec: null };
+    const hp = n.home != null ? profOf(L, n.home) : null;
+    if (hp) return { pool: 'medium', spec: hp, home: true };
+    if (action === 'attack') return { pool: 'medium', spec: profOf(L, team) };
+    return { pool: 'easy', spec: null };
+  }
+  function pickTask(L, action, n, team) {
+    const k = taskKind(L, n, action, team);
+    let list = DEMO_TASKS.filter((v) => v.pool === k.pool && QUICK.has(v.type) && (!k.spec || v.spec === k.spec));
+    if (!list.length) list = DEMO_TASKS.filter((v) => v.pool === k.pool && QUICK.has(v.type));
     return list[Math.floor(Math.random() * list.length)];
   }
 
@@ -274,7 +344,7 @@
   function clear() { if (G.timer) { clearInterval(G.timer); G.timer = null; } $app.replaceChildren(); }
   function showLogin(msg, auto) {
     clear(); stopPoll(); G.live = false;
-    const inp = h('input', { class: 't code-in', id: 'f-code', placeholder: 'ИТМ-0000-00', maxlength: '11', autocomplete: 'off', inputmode: 'numeric', spellcheck: 'false' });
+    const inp = h('input', { class: 't code-in', id: 'f-code', placeholder: 'ИТМ-0000-0000', maxlength: '13', autocomplete: 'off', inputmode: 'numeric', spellcheck: 'false' });
     const err = h('p', { class: 'err', hidden: !msg }, msg || '');
     const form = h('form', { class: 'sheet screws', novalidate: true },
       h('h2', null, 'Вход в игру'),
@@ -284,33 +354,65 @@
     const btn = form.querySelector('button[type=submit]');
     form.addEventListener('submit', (e) => {
       e.preventDefault(); const v = inp.value.trim().toUpperCase().replace(/\s/g, '');
-      if (!/^ИТМ-\d{4}-\d{2}$/.test(v)) { err.textContent = 'Код выглядит так: ИТМ-7203-19 — шесть цифр.'; err.hidden = false; return; }
-      if (LIVE) liveLogin(v, err, btn); else startDemo(v === 'ИТМ-0000-01');
+      if (!CODE_RE.test(v)) { err.textContent = 'Код выглядит так: ИТМ-7203-1958 — восемь цифр (ранние коды — шесть).'; err.hidden = false; return; }
+      if (LIVE) liveLogin(v, err, btn); else startDemo(v === 'ИТМ-0000-0001');
     });
-    inp.addEventListener('input', () => { const v = inp.value.replace(/^ИТМ/i, '').replace(/\D/g, '').slice(0, 6); inp.value = v ? 'ИТМ-' + v.slice(0, 4) + (v.length > 4 ? '-' + v.slice(4) : '') : ''; });
+    inp.addEventListener('input', () => { const v = inp.value.replace(/^ИТМ/i, '').replace(/\D/g, '').slice(0, 8); inp.value = v ? 'ИТМ-' + v.slice(0, 4) + (v.length > 4 ? '-' + v.slice(4) : '') : ''; });
     $app.append(
       h('div', { class: 'screen' }, h('div', { class: 'glass g-intro' }, netArt(), h('div', { class: 'hero-txt' },
         h('h1', null, 'Захват сети ИТМ'),
         h('p', { style: 'margin:0' }, 'Пять дней: 30 групп и команда преподавателей в одной сети учебного корпуса. Взламывайте узлы задачами по информатике, держите линии связи и выводите свою команду на первое место.')))),
       LIVE ? null : h('div', { class: 'banner' }, h('span', null, 'Демо-режим: соперники — боты, данные не сохраняются.'),
-        h('span', { class: 'demo-codes' }, h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-7203-19'; } }, 'Код студента'), h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-0000-01'; } }, 'Код преподавателя'))),
+        h('span', { class: 'demo-codes' }, h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-7203-1958'; } }, 'Код студента'), h('button', { type: 'button', onclick: () => { inp.value = 'ИТМ-0000-0001'; } }, 'Код преподавателя'))),
       form,
       rulesSheet());
     // код из ссылки «Войти в игру» или с прошлого входа
     const fromHash = decodeURIComponent((location.hash || '').slice(1)).toUpperCase();
-    const known = /^ИТМ-\d{4}-\d{2}$/.test(fromHash) ? fromHash : LIVE ? store.get('zs_code') : null;
+    const known = CODE_RE.test(fromHash) ? fromHash : LIVE ? store.get('zs_code') : null;
     if (known) { inp.value = known; if (LIVE && auto) liveLogin(known, err, btn); }
   }
   // ---------- живая игра ----------
+  // неверный код: три попытки, дальше пауза 15 с, 30 с, 1 мин… (до 10 мин). Сервер отдельно ограничивает подбор с одного адреса.
+  const fails = { get() { try { return JSON.parse(store.get('zs_fails')) || { n: 0, until: 0 }; } catch (e) { return { n: 0, until: 0 }; } }, set(v) { store.set('zs_fails', JSON.stringify(v)); } };
+  const waitText = (sec) => sec >= 60 ? `${Math.ceil(sec / 60)} мин` : `${Math.ceil(sec)} с`;
+  function loginPause(err, btn, untilMs, msg) {
+    const tick = () => {
+      const left = (untilMs - Date.now()) / 1000;
+      if (left <= 0 || !btn.isConnected) { clearInterval(tm); btn.disabled = false; btn.textContent = 'Подключиться к сети'; return; }
+      btn.disabled = true; btn.textContent = 'Подождите ' + waitText(left); err.textContent = msg; err.hidden = false;
+    };
+    const tm = setInterval(tick, 1000); tick();
+  }
+  // код игры: ИТМ-0000-0000; самые первые коды были короче (ИТМ-0000-00) и тоже действуют
+  const CODE_RE = /^ИТМ-\d{4}-(\d{2}|\d{4})$/;
   async function liveLogin(code, err, btn) {
+    const f = fails.get();
+    if (f.until > Date.now()) return loginPause(err, btn, f.until, 'Слишком много неверных кодов подряд. Проверьте код на экране с результатом олимпиады.');
     btn.disabled = true; btn.textContent = 'Подключаемся…';
     try {
       const st = await rpc('g_login', { p_code: code });
+      if (st && st.error) {
+        btn.disabled = false; btn.textContent = 'Подключиться к сети';
+        if (st.error === 'BAD_CODE') {
+          if (store.get('zs_code') === code) store.del('zs_code');
+          const n = f.n + 1, until = n >= 3 ? Date.now() + Math.min(600, 15 * 2 ** (n - 3)) * 1000 : 0;
+          fails.set({ n, until });
+          if (until) return loginPause(err, btn, until, ERR.BAD_CODE + ' Следующая попытка — через паузу.');
+          err.textContent = ERR.BAD_CODE + (n === 2 ? ' Осталась одна попытка без паузы.' : ''); err.hidden = false; return;
+        }
+        if (st.error === 'TOO_MANY') return loginPause(err, btn, Date.now() + (st.wait || 60) * 1000, 'С этой сети ввели слишком много неверных кодов. Подождите немного.');
+        if (st.error === 'TEAM_FULL') { err.textContent = `Команда уже набрана: в ней предельное число игроков (${st.limit}). Напишите организатору турнира.`; err.hidden = false; return; }
+        throw new Error(st.error);
+      }
+      fails.set({ n: 0, until: 0 });
       store.set('zs_code', code);
-      G.live = true; G.code = code; G.L = buildMap(); G.ver = -1; G.logId = 0; G.day = null; G.view = 'map'; G.sel = null; G.vb = null; G.over = false;
+      G.live = true; G.code = code; G.L = buildMap(); G.ver = -1; G.logId = 0; G.seen = new Set(); G.day = null; G.view = 'map'; G.sel = null; G.vb = null; G.over = false;
       G.me = { name: st.me.name, team: st.me.team, energy: st.me.energy, captures: st.me.captures, code, teacher: !!G.L.teams[st.me.team].teach };
       applyLive(st, true);
       showGame(); maybeBrief(); startPoll();
+      // начатая атака уже оплачена: после перезагрузки страницы возвращаем ту же задачу
+      const pend = st.pending, pn = pend && G.L.nodes[pend[0]];
+      if (pn && pend[1] === 'attack') { toast('У вас есть начатая атака — продолжаем её.'); hack(G.L, pn, 'attack'); }
     } catch (e) { err.textContent = errText(e); err.hidden = false; btn.disabled = false; btn.textContent = 'Подключиться к сети'; }
   }
   function applyLive(st, first) {
@@ -325,8 +427,8 @@
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
     G.top = st.top || [];
     const fresh = [];
-    (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (id <= G.logId) return; G.logId = id; const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
-    if (L.log.length > 120) L.log.length = 120;
+    (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (G.seen.has(id)) return; G.seen.add(id); G.logId = Math.max(G.logId, id); const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
+    L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     G.ver = st.ver;
     return { dayChanged: prevDay != null && prevDay !== G.day, fresh: first ? [] : fresh };
   }
@@ -336,11 +438,15 @@
     if (!visHooked) { visHooked = true; document.addEventListener('visibilitychange', () => { if (!document.hidden && G.live) pollLive(); }); }
   }
   function stopPoll() { if (G.poll) { clearInterval(G.poll); G.poll = null; } }
+  // запрос с небольшим перекрытием по версиям и журналу: изменение, которое записалось чуть позже соседнего
+  // с большим номером, не потеряется. Повторы безвредны — узлы приходят в текущем виде, журнал отсеивается по id.
   async function pollLive() {
     if (!G.live || polling || document.hidden || document.querySelector('.hack-modal')) return;
     polling = true;
     try {
-      const r = applyLive(await rpc('g_state', { p_code: G.code, p_ver: G.ver, p_log: G.logId }), false);
+      const st = await rpc('g_state', { p_code: G.code, p_ver: Math.max(0, G.ver - 40), p_log: Math.max(0, G.logId - 30) });
+      if (st && st.error) { if (st.error !== 'TOO_MANY') location.reload(); return; } // поле перезалили или код пропал — войти заново
+      const r = applyLive(st, false);
       if (r.dayChanged) { G.sel = null; showGame(); maybeBrief(); return; }
       const hud = document.querySelector('.hud'); if (hud) hud.replaceWith(buildHud());
       if (G.view === 'map' && mapRefs && mapRefs.L === G.L) { mapRefs.draw(); if (G.sel != null) mapRefs.drawSheet(); r.fresh.filter((e) => !e.me).slice(0, 4).forEach((e) => liveUpdate(G.L, e)); }
@@ -359,14 +465,15 @@
       h('h2', null, 'Правила'),
       h('div', { class: 'rule-grid' },
         h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждые 2 часа — в 0:00, 2:00 … 22:00 — +1 ⚡. Копится до 6 ⚡: заходите утром и вечером, чтобы заряд не простаивал.')),
-        h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача.')),
-        h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. Задача сложнее, при 2+ щитах — «босс».')),
-        h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты.')),
+        h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача (на домашнем узле чужой группы — ⭐⭐ по её специальности). В понедельник — 0 ⚡ и мини-игра вместо задачи.')),
+        h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
+        h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
+        h('div', null, h('b', null, '🏠 Домашние узлы'), h('p', null, 'Три соседа базы каждой группы. Задачи на них ⭐⭐ — по специальности этой группы: хозяевам легче их удержать.')),
         h('div', null, h('b', null, '🔗 Связь'), h('p', null, 'Узлы, отрезанные от базы, не приносят очков. Между цехами кабели идут только через двери.')),
         h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5, больше половины цеха — +10. Каждую полночь счёт команды записывается в копилку: итог недели — сумма всех пяти дней.')),
-        h('div', null, h('b', null, '🔥 Горячая точка'), h('p', null, 'Каждый день один узел горит: пока он ваш, он приносит +10 очков.')),
+        h('div', null, h('b', null, '🔥 Горячая точка'), h('p', null, 'Каждый день горит один узел в одной из четырёх серверных: пока он ваш, он приносит +10 очков.')),
         h('div', null, h('b', null, '📅 5 дней'), h('p', null, `С ${dayDate(1).text} по ${atIrk(gEnd()).text}. Каждую полночь — событие, которое переворачивает поле. Итоги — ${finalText(0)}.`))),
-      h('p', { class: 'small muted', style: 'margin:0' }, 'Ошибка во взломе сжигает потраченную энергию. Студенты играют за свои группы, преподаватели — общей командой «Преподаватели» с базой в Учительской.'));
+      h('p', { class: 'small muted', style: 'margin:0' }, 'Ошибка в задаче сжигает потраченную энергию, проигрыш в мини-игре — нет: её можно пройти ещё раз. Студенты играют за свои группы, преподаватели — общей командой «Преподаватели» с базой в Учительской.'));
   }
   // теория для задач уровня БОСС
   const THEORY = {
@@ -416,7 +523,7 @@
     const daySub = G.day ? `${dayDate(G.day).wd} ${dayDate(G.day).short} · ${hhmm(G.clock)}` : `старт ${atIrk(gStart()).short}`;
     const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : me.energy >= E_CAP ? 'запас полон' : '+1 в ' + hhmm((Math.floor(G.clock / 120) + 1) * 120);
     return h('div', { class: 'hud' },
-      h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: `background:${myT.color}` }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
+      h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: swatchStyle(myT) }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
       h('div', { class: 'hud-en', title: 'Энергия' }, h('small', null, 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
@@ -472,6 +579,7 @@
     <pattern id="fl4" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0 8 8M8 16 16 8M8 0 16 8M0 16 8 8" stroke="rgba(100,70,30,.13)"/></pattern>
     <pattern id="fl5" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.2" fill="rgba(140,40,25,.17)"/><circle cx="9" cy="9" r="1.2" fill="rgba(140,40,25,.17)"/></pattern>`;
   // оборудование цехов: тонкая графика под сетью, кое-что шевелится
+  [REG_TINT, REG_MID, REG_INK, REG_ICON, FLOOR].forEach((a) => { a[7] = a[8] = a[9] = a[2]; }); // все серверные оформлены как серверная 2
   function propArt(i, k, t, anim) {
     const A = (x) => (anim ? x : '');
     const blink = (d, dur) => A(`<animate attributeName="opacity" values="1;.12;1" keyTimes="0;.5;1" calcMode="discrete" dur="${dur || 1.2 + (d % 3) * 0.45}s" begin="${(d * 0.37).toFixed(2)}s" repeatCount="indefinite"/>`);
@@ -539,7 +647,7 @@
     // полы цехов
     L.regions.forEach((r, i) => { s += `<rect x="${r.x0}" y="${r.y0}" width="${r.x1 - r.x0}" height="${r.y1 - r.y0}" fill="${REG_TINT[i]}"/><rect x="${r.x0}" y="${r.y0}" width="${r.x1 - r.x0}" height="${r.y1 - r.y0}" fill="url(#fl${FLOOR[i]})"/>`; });
     // оборудование
-    L.regions.forEach((r, i) => { s += `<g transform="translate(${r.px.toFixed(1)} ${r.py.toFixed(1)})" opacity=".9">${propArt(i, REG_INK[i], REG_MID[i], !reduce)}</g>`; });
+    L.regions.forEach((r, i) => { s += `<g transform="translate(${r.px.toFixed(1)} ${r.py.toFixed(1)})" opacity=".9">${propArt(SERVER_ROOMS.includes(i) ? 2 : i, REG_INK[i], REG_MID[i], !reduce)}</g>`; });
     // внутренние стены с дверными проёмами
     let wallStr = '';
     P.walls.forEach((w, wi) => {
@@ -571,31 +679,53 @@
     for (const q of p.slice().reverse()) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
     return lo.slice(0, -1).concat(up.slice(0, -1));
   }
-  // значок узла (используется и на карте, и в легенде)
-  function nodeShape(kind, fill, opts = {}) {
-    const g = sv('g', {});
-    const sw = opts.mine ? 2.6 : 2;
-    if (kind === 'base') { g.append(sv('rect', { x: -13, y: -13, width: 26, height: 26, rx: 5, fill, stroke: INK, 'stroke-width': 2.6 })); g.append(opts.teach ? sv('path', { d: CAP, fill: PAPER, stroke: INK, 'stroke-width': 1.3, 'stroke-linejoin': 'round' }) : sv('path', { d: 'M-4 7V-7M-4 -7h9l-2.5 3.5L5 0h-9', fill: PAPER, stroke: INK, 'stroke-width': 1.4, 'stroke-linejoin': 'round' })); }
-    else if (kind === 'core') { const pts = Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 6.5 : 14; return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`; }).join(' '); g.append(sv('polygon', { points: pts, fill, stroke: INK, 'stroke-width': sw, 'stroke-linejoin': 'round' })); }
-    else if (kind === 'server') { g.append(sv('rect', { x: -9.5, y: -11, width: 19, height: 22, rx: 2.5, fill, stroke: INK, 'stroke-width': sw })); [-5, 0, 5].forEach((y) => { g.append(sv('line', { x1: -5.5, y1: y, x2: 3, y2: y, stroke: INK, 'stroke-width': 1.4 })); g.append(sv('circle', { cx: 5.5, cy: y, r: 1, fill: INK })); }); }
-    else { g.append(sv('circle', { r: 10, fill, stroke: INK, 'stroke-width': sw })); if (opts.mine) g.append(sv('circle', { r: 3.4, fill: PAPER })); }
+  // значок узла (используется и на карте, и в легенде). t — команда-владелец, null — свободный узел.
+  // Свободный — пустой контур пунктиром; занятый — заливка основным цветом команды и метка вторым цветом.
+  const FREE_LINE = '#8f8668';
+  function nodeShape(kind, t, opts = {}) {
+    const g = sv('g', {}), free = !t, cut = !free && opts.cut;
+    const main = free ? PAPER : cut ? 'url(#hatchCut)' : t.color, acc = free || cut ? null : t.color2;
+    const line = free ? { stroke: FREE_LINE, 'stroke-width': 2, 'stroke-dasharray': '3.2 2.4' } : { stroke: cut ? t.color : INK, 'stroke-width': opts.mine ? 2.8 : 2 };
+    if (kind === 'base') { // шестигранник-штаб: заливка — основной цвет, внутренний контур — второй
+      const hx = (r) => Array.from({ length: 6 }, (_, i) => { const a = Math.PI / 6 + i * Math.PI / 3; return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`; }).join(' ');
+      g.append(sv('polygon', { points: hx(15), fill: main, ...line, 'stroke-width': free ? 2 : 2.6, 'stroke-linejoin': 'round' }));
+      if (acc) g.append(sv('polygon', { points: hx(9.6), fill: 'none', stroke: acc, 'stroke-width': 2.6, 'stroke-linejoin': 'round' }));
+      g.append(opts.teach ? sv('path', { d: CAP, transform: 'translate(0 1) scale(.82)', fill: PAPER, stroke: INK, 'stroke-width': 1.4, 'stroke-linejoin': 'round' })
+        : sv('path', { d: 'M-4 7V-7M-4 -7h9l-2.5 3.5L5 0h-9', transform: 'translate(0 1) scale(.75)', fill: PAPER, stroke: INK, 'stroke-width': 1.7, 'stroke-linejoin': 'round' }));
+    } else if (kind === 'core') {
+      const pts = Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 6.5 : 14; return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`; }).join(' ');
+      g.append(sv('polygon', { points: pts, fill: main, ...line, 'stroke-linejoin': 'round' }));
+      if (acc) g.append(sv('circle', { r: 3.6, fill: acc, stroke: INK, 'stroke-width': 1 }));
+    } else if (kind === 'server') { // стойка: полки — вторым цветом
+      g.append(sv('rect', { x: -8.5, y: -11, width: 17, height: 22, rx: 2.5, fill: main, ...line }));
+      [-5, 0, 5].forEach((y) => g.append(sv('line', { x1: -4.5, y1: y, x2: 4.5, y2: y, stroke: acc || FREE_LINE, 'stroke-width': acc ? 2.4 : 1.4, 'stroke-linecap': 'round' })));
+    } else {
+      g.append(sv('circle', { r: free ? 8 : 10, fill: main, ...line }));
+      if (acc) g.append(sv('circle', { r: 4, fill: acc, stroke: INK, 'stroke-width': 1 }));
+    }
     return g;
   }
+  const C_PLUS = '#1971c2', C_ATK = '#e03131';
+  // значок «прицел» внутри текста подсказок
+  const miniAtk = () => { const i = h('i', { class: 'mini atk', 'aria-label': 'прицел' }); i.innerHTML = '<svg viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><circle r="3.3" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M0 -6V-2.2M0 2.2V6M-6 0H-2.2M2.2 0H6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>'; return i; };
   function badge(type, n) {
     const g = sv('g', { class: 'bdg bdg-' + type });
-    if (type === 'plus' || type === 'attack') { g.setAttribute('transform', 'translate(10 10)'); const b = sv('g', { class: 'bob' }); b.append(sv('circle', { r: 6.5, fill: type === 'plus' ? '#ec6a1c' : '#c2381f', stroke: INK, 'stroke-width': 1.4 }), sv('path', { d: type === 'plus' ? 'M-3 0h6M0 -3v6' : 'M-3 -3l6 6M3 -3l-6 6', stroke: '#fff', 'stroke-width': 2, 'stroke-linecap': 'round' })); g.append(b); }
+    if (type === 'plus' || type === 'attack') { g.setAttribute('transform', 'translate(10 10)'); const b = sv('g', { class: 'bob' }); b.append(sv('circle', { r: 7, fill: type === 'plus' ? C_PLUS : C_ATK, stroke: INK, 'stroke-width': 1.4 }));
+      if (type === 'plus') b.append(sv('path', { d: 'M-3 0h6M0 -3v6', stroke: '#fff', 'stroke-width': 2, 'stroke-linecap': 'round' }));
+      else b.append(sv('circle', { r: 3.3, fill: 'none', stroke: '#fff', 'stroke-width': 1.5 }), sv('path', { d: 'M0 -5.6V-2.2M0 2.2V5.6M-5.6 0H-2.2M2.2 0H5.6', stroke: '#fff', 'stroke-width': 1.5, 'stroke-linecap': 'round' })); /* прицел */ g.append(b); }
     if (type === 'shield') { g.setAttribute('transform', 'translate(-11 -11)'); g.append(sv('path', { d: 'M0 -6.5 5.5 -4.5V0c0 3.5-2.6 5.6-5.5 6.8C-2.9 5.6-5.5 3.5-5.5 0v-4.5z', fill: '#20406a', stroke: PAPER, 'stroke-width': 1.2 })); const t = sv('text', { y: 2.6, 'text-anchor': 'middle', class: 'bdg-n' }); t.textContent = n; g.append(t); }
     if (type === 'hot') { g.setAttribute('transform', 'translate(0 -22)'); g.append(sv('circle', { r: 7.5, fill: '#ffcf3f', stroke: INK, 'stroke-width': 1.4 }), sv('path', { d: 'M0 -4.6c2.4 2.2 3.5 3.9 3.5 5.7a3.5 3.5 0 0 1-7 0c0-1.2.6-2.3 1.5-3 .1 1.1.6 1.8 1.3 2 .2-1.7.3-3 .7-4.7z', fill: '#c2381f' })); }
     if (type === 'cut') { g.setAttribute('transform', 'translate(10 -10)'); g.append(sv('circle', { r: 6, fill: PAPER, stroke: '#6f6a55', 'stroke-width': 1.2 }), sv('path', { d: 'M-3 1.5 -1 -.5M1 .5 3 -1.5M-1.5 -2.5l.8 1.4M1.5 2.5l-.8-1.4', stroke: '#6f6a55', 'stroke-width': 1.3, 'stroke-linecap': 'round' })); }
     return g;
   }
-  function roomTag(R, i, ctrlColor) {
+  function roomTag(R, i, ctrl) {
     const label = R.name.toUpperCase(), wpx = label.length * 7.4 + 48;
     const lg = sv('g', { transform: `translate(${(R.x0 + 14 + wpx / 2).toFixed(0)} ${R.y0.toFixed(0)})`, class: 'reg-tag' });
     lg.append(sv('rect', { x: -wpx / 2, y: -11, width: wpx, height: 22, rx: 11, fill: PAPER, stroke: REG_INK[i], 'stroke-width': 1.6 }));
     lg.append(sv('path', { d: REG_ICON[i] || '', transform: `translate(${-wpx / 2 + 6} -8) scale(.66)`, fill: 'none', stroke: REG_INK[i], 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
     const t = sv('text', { x: 3, y: 4, 'text-anchor': 'middle', class: 'reg-lbl', fill: REG_INK[i] }); t.textContent = label; lg.append(t);
-    lg.append(sv('circle', ctrlColor ? { cx: wpx / 2 - 11, cy: 0, r: 5.5, fill: ctrlColor, stroke: INK, 'stroke-width': 1.4 } : { cx: wpx / 2 - 11, cy: 0, r: 5, fill: 'none', stroke: REG_INK[i], 'stroke-width': 1.3, 'stroke-dasharray': '2 2' }));
+    lg.append(sv('circle', ctrl ? { cx: wpx / 2 - 11, cy: 0, r: 5.5, fill: ctrl.color, stroke: INK, 'stroke-width': 1.4 } : { cx: wpx / 2 - 11, cy: 0, r: 5, fill: 'none', stroke: REG_INK[i], 'stroke-width': 1.3, 'stroke-dasharray': '2 2' }));
+    if (ctrl) lg.append(sv('circle', { cx: wpx / 2 - 11, cy: 0, r: 2.2, fill: ctrl.color2 }));
     return lg;
   }
 
@@ -606,6 +736,8 @@
     const svg = sv('svg', { class: 'netmap', role: 'img', 'aria-label': 'Карта сети техникума' });
     const defs = sv('defs', {});
     defs.innerHTML = `<pattern id="hatchCut" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#8f8668" stroke-width="2"/></pattern>
+      <filter id="glowF" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <radialGradient id="spotG"><stop offset="0" stop-color="#000"/><stop offset=".55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
       <radialGradient id="haloG"><stop offset="0" stop-color="${myColor}" stop-opacity=".6"/><stop offset=".55" stop-color="${myColor}" stop-opacity=".3"/><stop offset="1" stop-color="${myColor}" stop-opacity="0"/></radialGradient>${FLOOR_DEFS}`;
     svg.append(defs);
     const bg = sv('g', { class: 'plan' }); svg.append(bg); drawPlan(L, bg);
@@ -614,12 +746,14 @@
     let drag = null;
     const clampVB = (v) => { const m = v.w * 0.05; if (v.w >= X1 - X0) v.x = (X0 + X1 - v.w) / 2; else v.x = Math.max(X0 - m, Math.min(X1 - v.w + m, v.x)); const bot = G.sel != null ? v.h * 0.5 : m; if (v.h >= Y1 - Y0) v.y = Math.max(Y0 - m, Math.min(v.y, (Y0 + Y1 - v.h) / 2 + bot)); else v.y = Math.max(Y0 - m, Math.min(Y1 - v.h + bot, v.y)); return v; };
     const setVB = () => { const asp = (svg.clientHeight || 1) / (svg.clientWidth || 1); G.vb.h = G.vb.w * asp; if (!drag) clampVB(G.vb); svg.setAttribute('viewBox', `${G.vb.x} ${G.vb.y} ${G.vb.w} ${G.vb.h}`); };
+    let flyTok = 0; // новый перелёт отменяет предыдущий
     const flyTo = (x, y, w, ay) => {
       const from = { ...G.vb }, tw = w || G.vb.w, asp = (svg.clientHeight || 1) / (svg.clientWidth || 1), th = tw * asp;
       const to = clampVB({ x: x - tw / 2, y: y - th * (ay != null ? ay : G.sel != null ? 0.3 : 0.45), w: tw, h: th });
       if (reduce) { G.vb = { ...to, h: th }; setVB(); return; }
-      const t0 = performance.now(); const step = (t) => { const k = Math.min(1, (t - t0) / 420), e = 1 - (1 - k) ** 3; G.vb.x = from.x + (to.x - from.x) * e; G.vb.y = from.y + (to.y - from.y) * e; G.vb.w = from.w + (to.w - from.w) * e; setVB(); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step);
+      const tok = ++flyTok, t0 = performance.now(); const step = (t) => { if (tok !== flyTok) return; const k = Math.min(1, (t - t0) / 420), e = 1 - (1 - k) ** 3; G.vb.x = from.x + (to.x - from.x) * e; G.vb.y = from.y + (to.y - from.y) * e; G.vb.w = from.w + (to.w - from.w) * e; setVB(); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step);
     };
+    const showAll = () => { const asp = (svg.clientHeight || 1) / (svg.clientWidth || 1); flyTo((X0 + X1) / 2, (Y0 + Y1) / 2 + 10, Math.max(X1 - X0, (Y1 - Y0 + 30) / asp) + 10, 0.5); };
     if (!G.vb) { const b = L.nodes[L.teams[team].base]; G.vb = { x: b.x - 200, y: b.y - 160, w: 400, h: 400 }; }
 
     const hudChip = h('div', { class: 'map-chip' });
@@ -628,7 +762,7 @@
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Приблизить', onclick: () => zoom(0.72) }, '+'),
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Отдалить', onclick: () => zoom(1 / 0.72) }, '−'),
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'К базе', title: 'К базе', onclick: () => { const b = L.nodes[L.teams[team].base]; flyTo(b.x, b.y + 40, 400); } }, '⌂'),
-      h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Вся сеть', title: 'Вся сеть', onclick: () => { G.sel = null; draw(); drawSheet(); const asp = (svg.clientHeight || 1) / (svg.clientWidth || 1); flyTo((X0 + X1) / 2, (Y0 + Y1) / 2 + 10, Math.max(X1 - X0, (Y1 - Y0 + 30) / asp) + 10, 0.5); } }, '⤢'),
+      h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Вся сеть', title: 'Вся сеть', onclick: () => { G.sel = null; draw(); drawSheet(); showAll(); } }, '⤢'),
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Как читать карту', title: 'Как читать карту', onclick: showLegend }, '?'));
     const wrap = h('div', { class: 'mapwrap' }, svg, hudChip, ctl, sheet);
     function zoom(f) { const cx = G.vb.x + G.vb.w / 2, cy = G.vb.y + G.vb.h / 2; G.vb.w = Math.max(170, Math.min((X1 - X0) * 1.25, G.vb.w * f)); G.vb.x = cx - G.vb.w / 2; setVB(); G.vb.y = cy - G.vb.h / 2; setVB(); }
@@ -674,8 +808,9 @@
       L.edges.forEach(([a, b]) => {
         const A = L.nodes[a], B = L.nodes[b]; const same = A.owner != null && A.owner === B.owner && conns[A.owner].has(a) && conns[A.owner].has(b);
         const isMine = same && A.owner === team;
-        if (same) layer.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: INK, 'stroke-width': isMine ? 7.5 : 6.5, 'stroke-linecap': 'round', opacity: 0.85 }));
-        layer.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: same ? L.teams[A.owner].color : '#9d916abb', 'stroke-width': same ? (isMine ? 4.5 : 3.6) : 2.2, 'stroke-linecap': 'round', class: isMine ? 'my-edge' : '' }));
+        if (same) layer.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: INK, 'stroke-width': isMine ? 8 : 7, 'stroke-linecap': 'round', opacity: 0.85 }));
+        layer.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: same ? L.teams[A.owner].color : '#9d916abb', 'stroke-width': same ? (isMine ? 5 : 4.2) : 2.2, 'stroke-linecap': 'round', class: isMine ? 'my-edge' : '' }));
+        if (same) layer.append(sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: L.teams[A.owner].color2, 'stroke-width': 1.4, 'stroke-linecap': 'round' })); // полоса вторым цветом
         if (isMine) myEdges.push([A, B]);
       });
       if (!reduce) myEdges.slice(0, 14).forEach(([A, B], i) => { const c = sv('circle', { r: 2.6, fill: PAPER, stroke: INK, 'stroke-width': 0.8 }); const am = sv('animateMotion', { dur: (1.6 + (i % 5) * 0.35) + 's', repeatCount: 'indefinite', path: i % 2 ? `M${A.x},${A.y} L${B.x},${B.y}` : `M${B.x},${B.y} L${A.x},${A.y}`, begin: (i * 0.23) + 's' }); c.append(am); layer.append(c); });
@@ -685,11 +820,8 @@
         const g = sv('g', { transform: `translate(${n.x.toFixed(1)} ${n.y.toFixed(1)})`, 'data-id': n.id, class: 'nd' + (cut ? ' cut' : '') });
         const canPlus = reach.has(n.id) && n.owner == null, canAtk = reach.has(n.id) && owned;
         if (L.hot === n.id) g.append(sv('circle', { r: 24, fill: 'rgba(255,207,63,.25)', stroke: '#e0a100', 'stroke-width': 2.5, class: 'hotring' }));
-        if (canPlus || canAtk) g.append(sv('circle', { r: 18, fill: 'none', stroke: canPlus ? '#ec6a1c' : '#c2381f', 'stroke-width': 2.2, 'stroke-dasharray': '4 3', class: 'reach' }));
-        const fill = !owned ? PAPER : cut ? 'url(#hatchCut)' : L.teams[n.owner].color;
-        const shape = nodeShape(n.kind, fill, { mine: isMine && !cut, teach: owned && L.teams[n.owner].teach });
-        if (cut) shape.querySelectorAll('[fill]').forEach((el) => { if (el.getAttribute('fill') === 'url(#hatchCut)') el.setAttribute('stroke', L.teams[n.owner].color); });
-        g.append(shape);
+        if (canPlus || canAtk) g.append(sv('circle', { r: 18, fill: 'none', stroke: canPlus ? C_PLUS : C_ATK, 'stroke-width': 2.4, 'stroke-dasharray': '4 3', class: 'reach' }));
+        g.append(nodeShape(n.kind, owned ? L.teams[n.owner] : null, { mine: isMine && !cut, cut, teach: owned && L.teams[n.owner].teach }));
         if (n.kind === 'base') {
           const name = L.teams[n.owner].name, lbl = isMine ? 'ВЫ · ' + name : name, wpx = lbl.length * 6.4 + 12;
           g.append(sv('rect', { x: -wpx / 2, y: 17, width: wpx, height: 15, rx: 7.5, fill: isMine ? '#ec6a1c' : L.teams[n.owner].teach ? '#7a5d05' : INK }));
@@ -704,14 +836,14 @@
         layer.append(g);
       });
       // таблички цехов: точка — цвет команды, которая держит цех
-      L.regions.forEach((R, i) => { const all = L.nodes.filter((n) => n.region === R.id && n.kind !== 'base'); let ctrl = null; L.teams.forEach((_, t) => { if (all.filter((n) => conns[t].has(n.id)).length * 2 > all.length) ctrl = t; }); layer.append(roomTag(R, i, ctrl == null ? null : L.teams[ctrl].color)); });
+      L.regions.forEach((R, i) => { const all = L.nodes.filter((n) => n.region === R.id && n.kind !== 'base'); let ctrl = null; L.teams.forEach((_, t) => { if (all.filter((n) => conns[t].has(n.id)).length * 2 > all.length) ctrl = t; }); layer.append(roomTag(R, i, ctrl == null ? null : L.teams[ctrl])); });
       const rows = standings(L), place = rows.findIndex((r) => r.i === team) + 1, mineRow = rows[place - 1];
-      hudChip.replaceChildren(h('span', { class: 'swatch', style: `background:${myColor}` }), h('b', null, `${mineRow.nodes} узл. · ${mineRow.s} очк.`), h('span', null, `${place}-е место`));
+      hudChip.replaceChildren(h('span', { class: 'swatch', style: swatchStyle(L.teams[team]) }), h('b', null, `${mineRow.nodes} узл. · ${mineRow.s} очк.`), h('span', null, `${place}-е место`));
     }
 
     function drawSheet() {
       const n = G.sel != null ? L.nodes[G.sel] : null;
-      if (!n) { sheet.className = 'map-sheet hint'; fillEl(sheet, h('span', null, 'Нажмите на узел со значком '), h('i', { class: 'mini plus' }, '+'), h('span', null, ' или '), h('i', { class: 'mini atk' }, '×')); return; }
+      if (!n) { sheet.className = 'map-sheet hint'; fillEl(sheet, h('span', null, 'Нажмите на узел со значком '), h('i', { class: 'mini plus' }, '+'), h('span', null, ' или '), miniAtk()); return; }
       sheet.className = 'map-sheet open';
       const reach = reachable(L, team), own = n.owner === team, conn = n.owner != null && connected(L, n.owner).has(n.id);
       const ownerT = n.owner != null ? L.teams[n.owner] : null;
@@ -719,21 +851,25 @@
       const live = !G.over && G.day >= 1;
       if (live && reach.has(n.id)) acts.push(n.owner == null ? 'capture' : 'attack');
       if (live && own && n.kind !== 'base' && n.shield < 3 && conn) acts.push('fortify');
-      const tier = (a) => (a === 'attack' ? (n.shield >= 2 ? '⭐⭐⭐' : '⭐⭐') : '⭐');
+      const tier = (a) => ({ boss: '⭐⭐⭐', medium: '⭐⭐', easy: '⭐' }[taskKind(L, n, a, team).pool]);
+      const homeP = n.home != null ? profOf(L, n.home) : null;
+      const homeTxt = homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '';
       const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? 'Свободный узел рядом с вашей сетью.' : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
       const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
       fillEl(sheet,
         h('button', { type: 'button', class: 'sh-x', 'aria-label': 'Закрыть', onclick: () => { G.sel = null; draw(); drawSheet(); } }, '×'),
         h('div', { class: 'sh-top' },
-          h('span', { class: 'sh-ico' }, (() => { const s = sv('svg', { viewBox: '-16 -16 32 32', width: 34, height: 34 }); s.append(nodeShape(n.kind, ownerT ? ownerT.color : PAPER, { teach: ownerT && ownerT.teach })); return s; })()),
+          h('span', { class: 'sh-ico' }, (() => { const s = sv('svg', { viewBox: '-16 -16 32 32', width: 34, height: 34 }); s.append(nodeShape(n.kind, ownerT, { teach: ownerT && ownerT.teach })); return s; })()),
           h('div', { class: 'sh-txt' }, h('span', { class: 'eyebrow' }, `${kindName} · ${L.regions[n.region].name}`), h('b', null, ownerT ? ownerT.name : 'Свободен')),
           n.kind !== 'base' ? h('span', { class: 'np-val' + (L.hot === n.id ? ' hot' : '') }, '+' + nodeValue(L, n, evOf(G))) : null),
-        h('div', { class: 'sh-meta' }, h('span', null, 'Щиты'), h('span', { class: 'np-shields' }, ...Array.from({ length: 3 }, (_, i) => h('i', { class: i < n.shield ? 'on' : '' })))),
-        h('p', { class: 'sh-why' }, why),
+        n.kind !== 'base' ? h('div', { class: 'sh-meta' }, h('span', null, 'Щиты'), h('span', { class: 'np-shields' }, ...Array.from({ length: 3 }, (_, i) => h('i', { class: i < n.shield ? 'on' : '' })))) : null,
+        h('p', { class: 'sh-why' }, why + (G.day && !G.over ? homeTxt : '')),
+        n.kind === 'base' ? h('button', { type: 'button', class: 'btn ghost roster-btn', onclick: () => showRoster(L, n.owner) }, ownerT.teach ? 'Состав команды' : 'Список группы', h('small', null, ` · ${ownerT.members || 0} игр.`)) : null,
         acts.length ? h('div', { class: 'np-acts' }, ...acts.map((a) => { const c = cost(G, L, n, a); return h('button', { class: 'btn' + (a === 'fortify' ? ' ghost' : a === 'attack' ? ' btn-atk' : ''), type: 'button', disabled: me.energy < c, onclick: () => hack(L, n, a) },
-          h('span', null, { capture: 'Захватить', attack: 'Атаковать', fortify: 'Укрепить щит' }[a]), h('small', null, ` ${c} ⚡ · задача ${tier(a)}`)); })) : null,
-        acts.length && acts.some((a) => me.energy < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, 'Не хватает энергии — завтра будет +3 ⚡.') : null);
+          h('span', null, { capture: 'Захватить', attack: 'Атаковать', fortify: 'Укрепить щит' }[a]), h('small', null, c === 0 && a !== 'attack' ? ' 0 ⚡ · мини-игра' : ` ${c} ⚡ · задача ${tier(a)}`)); })) : null,
+        acts.includes('attack') ? h('p', { class: 'small muted', style: 'margin:0' }, 'Начатую атаку отменить нельзя: ⚡ списывается сразу.') : null,
+        acts.length && acts.some((a) => me.energy < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, 'Не хватает энергии — новая приходит каждые 2 часа.') : null);
     }
 
     function playAnim() {
@@ -744,8 +880,62 @@
     }
     function ripple(n, color, delay) { setTimeout(() => { [0, 180].forEach((dl) => { const c = sv('circle', { cx: n.x, cy: n.y, r: 12, fill: 'none', stroke: color, 'stroke-width': 4, class: 'ripple' }); c.style.animationDelay = dl + 'ms'; fx.append(c); setTimeout(() => c.remove(), 1400); }); }, delay || 0); }
 
+
+    // утренняя анимация события дня — как в трейлере: волна запуска сети, блэкаут в серверных, перестановка дверей,
+    // прожектор на лидеров, красная тревога финального дня. Карта на время показывается целиком, потом возвращается.
+    function dayFx(day, done) {
+      const ev = DAYS[day]; done = done || (() => {});
+      if (!ev || reduce || !svg.isConnected) return done();
+      const back = { ...G.vb }; let touched = false;
+      const onTouch = () => { touched = true; }; svg.addEventListener('pointerdown', onTouch);
+      showAll();
+      const g = sv('g', { class: 'dayfx', 'pointer-events': 'none' }); fx.append(g);
+      const ccx = (P.bx0 + P.bx1) / 2, ccy = (P.by0 + P.by1) / 2, maxR = Math.hypot(P.bx1 - P.bx0, P.by1 - P.by0) / 2 + 30;
+      let dur = 2600;
+      if (!ev.flip) { // волна запуска: зелёное кольцо от центра, узлы вспыхивают, когда до них доходит волна
+        const ring = sv('circle', { cx: ccx, cy: ccy, r: 10, fill: 'none', stroke: '#2f8a46', 'stroke-width': 7, filter: 'url(#glowF)' });
+        // begin: indefinite + beginElement — иначе вставленная позже анимация считается уже прошедшей
+        const anims = [sv('animate', { attributeName: 'r', from: 10, to: maxR.toFixed(0), dur: '1.8s', begin: 'indefinite', fill: 'freeze', calcMode: 'spline', keyTimes: '0;1', keySplines: '.2 .7 .3 1' }),
+          sv('animate', { attributeName: 'opacity', values: '0.95;0.6;0', keyTimes: '0;0.8;1', dur: '1.8s', begin: 'indefinite', fill: 'freeze' })];
+        ring.append(...anims); g.append(ring); anims.forEach((a) => { try { a.beginElement(); } catch (e) { /* без SMIL — просто вспышки узлов */ } });
+        L.nodes.forEach((n) => { const c = sv('circle', { cx: n.x, cy: n.y, r: 11, fill: '#86f29a', stroke: '#2f8a46', 'stroke-width': 2, class: 'fx-spark' }); c.style.animationDelay = Math.round(Math.hypot(n.x - ccx, n.y - ccy) / maxR * 1500 + 250) + 'ms'; g.append(c); });
+        dur = 2400;
+      } else if (ev.flip === 'blackout') { // свет гаснет с миганием, на каждой серверной — «НЕТ ПИТАНИЯ»
+        ev.regions.forEach((ri, k) => {
+          const R = L.regions[ri];
+          const r = sv('rect', { x: R.x0, y: R.y0, width: R.x1 - R.x0, height: R.y1 - R.y0, fill: '#0b0f0c', class: 'fx-dark' }); r.style.animationDelay = k * 90 + 'ms'; g.append(r);
+          const t = sv('text', { x: (R.x0 + R.x1) / 2, y: (R.y0 + R.y1) / 2, 'text-anchor': 'middle', class: 'fx-nopower', filter: 'url(#glowF)' }); t.textContent = 'НЕТ ПИТАНИЯ'; g.append(t);
+        });
+        dur = 3000;
+      } else if (ev.flip === 'doors') { // заложенные проёмы — красные крестики, новые — светящиеся зелёные кабели
+        const now = new Set(L.edges.map(([a, b]) => ekey(a, b)).filter((k) => L.poolKeys.has(k))), was = L.doors1 || now;
+        L.pool.forEach((d, i) => {
+          const A = L.nodes[d.a], B = L.nodes[d.b], mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+          if (was.has(d.k) && !now.has(d.k)) { const x = sv('path', { d: `M${mx - 9} ${my - 9}L${mx + 9} ${my + 9}M${mx + 9} ${my - 9}L${mx - 9} ${my + 9}`, stroke: '#e03131', 'stroke-width': 4.5, 'stroke-linecap': 'round', class: 'fx-x' }); x.style.animationDelay = (i % 7) * 60 + 'ms'; g.append(x); }
+          else if (!was.has(d.k) && now.has(d.k)) { const len = Math.hypot(B.x - A.x, B.y - A.y), l = sv('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: '#2f8a46', 'stroke-width': 6, 'stroke-linecap': 'round', filter: 'url(#glowF)', class: 'fx-door' }); l.style.setProperty('--len', len.toFixed(1)); l.style.strokeDasharray = len; l.style.animationDelay = 500 + (i % 7) * 70 + 'ms'; g.append(l); }
+        });
+        dur = 3000;
+      } else if (ev.flip === 'leaders') { // прожектор: зал темнеет, лучи света падают на базы трёх лидеров
+        const id = 'spotM' + Date.now(), mask = sv('mask', { id }); mask.append(sv('rect', { x: X0 - 50, y: Y0 - 50, width: X1 - X0 + 100, height: Y1 - Y0 + 100, fill: '#fff' }));
+        const bases = (L.leaders || []).map((t) => L.nodes[L.teams[t].base]).filter(Boolean);
+        bases.forEach((n) => mask.append(sv('circle', { cx: n.x, cy: n.y, r: 120, fill: 'url(#spotG)' }))); defs.append(mask);
+        const dim = sv('rect', { x: X0 - 50, y: Y0 - 50, width: X1 - X0 + 100, height: Y1 - Y0 + 100, fill: '#0b0f0c', mask: `url(#${id})`, class: 'fx-dim' }); g.append(dim);
+        bases.forEach((n, k) => { const sx = ccx + (k - 1) * 260; const cone = sv('polygon', { points: `${sx - 14},${Y0} ${sx + 14},${Y0} ${n.x + 95},${n.y} ${n.x - 95},${n.y}`, fill: '#fff3c4', class: 'fx-cone' }); cone.style.animationDelay = 250 + k * 120 + 'ms'; g.append(cone);
+          const ring = sv('circle', { cx: n.x, cy: n.y, r: 28, fill: 'none', stroke: '#ffcf3f', 'stroke-width': 4, filter: 'url(#glowF)', class: 'fx-spotring' }); ring.style.animationDelay = 350 + k * 120 + 'ms'; g.append(ring); });
+        setTimeout(() => mask.remove(), 3400);
+        dur = 3200;
+      } else if (ev.flip === 'shields') { // финальный штурм: красная тревога по краям карты
+        wrap.classList.add('alarm');
+        dur = 2600;
+      }
+      setTimeout(() => {
+        g.remove(); wrap.classList.remove('alarm'); svg.removeEventListener('pointerdown', onTouch);
+        if (!touched && svg.isConnected) flyTo(back.x + back.w / 2, back.y + back.h * 0.45, back.w, 0.45);
+        done();
+      }, dur);
+    }
     const flash = (ids) => (ids || []).slice(0, 18).forEach((id, i) => ripple(L.nodes[id], '#ec6a1c', i * 110));
-    mapRefs = { L, draw, drawSheet, svg, ripple, team, flash };
+    mapRefs = { L, draw, drawSheet, svg, ripple, team, flash, dayFx, flyTo };
     requestAnimationFrame(() => { setVB(); playAnim(); if (G.focus != null) { const f = L.nodes[G.focus]; G.focus = null; flyTo(f.x, f.y, Math.min(G.vb.w, 380)); } });
     window.addEventListener('resize', setVB, { once: true });
     draw(); drawSheet();
@@ -760,25 +950,45 @@
       h('h3', null, 'Как играть — за 10 секунд'),
       h('ol', { class: 'coach-steps' },
         h('li', null, h('b', null, 'Светлое пятно — ваша сеть.'), G.me && G.me.teacher ? ' Она растёт от базы преподавателей в Учительской.' : ' Она растёт от базы вашей группы с флажком.'),
-        h('li', null, h('i', { class: 'mini plus' }, '+'), ' — свободный узел рядом: его можно захватить, ', h('i', { class: 'mini atk' }, '×'), ' — узел соперника: его можно атаковать.'),
+        h('li', null, h('i', { class: 'mini plus' }, '+'), ' — свободный узел рядом: его можно захватить, ', miniAtk(), ' — узел соперника: его можно атаковать.'),
         h('li', null, h('b', null, 'Нажмите на узел'), ' — внизу карты появится карточка с кнопкой. Решите задачу — узел ваш.')),
       h('button', { class: 'btn', type: 'button', onclick: ok }, 'Понятно, в бой'));
   }
+  // список игроков команды (карточка базы → «Список группы»)
+  async function showRoster(L, t) {
+    const T = L.teams[t], list = h('div', { class: 'roster' }, h('div', { class: 'spin' }));
+    const m = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'sheet roster-sheet' },
+      h('div', { class: 'roster-head' }, h('span', { class: 'swatch', style: swatchStyle(T) }), h('h2', null, T.teach ? 'Преподаватели' : 'Группа ' + T.name)),
+      list, h('button', { class: 'btn', type: 'button', onclick: () => m.remove() }, 'Закрыть')));
+    m.addEventListener('click', (e) => { if (e.target === m) m.remove(); });
+    document.body.append(m);
+    let rows;
+    if (G.live) { try { rows = await rpc('g_roster', { p_code: G.code, p_team: t }); if (rows && rows.error) throw new Error(rows.error); } catch (e) { list.replaceChildren(h('p', { class: 'err', style: 'margin:0' }, errText(e))); return; } }
+    else { // демо: имена-заглушки
+      rows = Array.from({ length: Math.min(T.members || 0, T.teach ? TEACHERS.length : 24) }, (_, i) => [T.teach ? TEACHERS[i] : SURN[(i * 7 + t) % SURN.length] + ' ' + 'АБВГДЕЖЗИКЛМНОПРСТ'[(i * 5 + t) % 18] + '.', (i * 13 + t * 3) % 9]).sort((a, b) => b[1] - a[1]);
+      if (t === G.me.team) rows.unshift([G.me.name, G.me.captures || 0]);
+    }
+    if (!rows.length) { list.replaceChildren(h('p', { class: 'muted', style: 'margin:0' }, 'Пока никто не вошёл в игру за эту команду.')); return; }
+    list.replaceChildren(h('p', { class: 'small muted', style: 'margin:0' }, `Игроков: ${rows.length}`),
+      h('ol', { class: 'roster-list' }, ...rows.map(([name, caps]) => h('li', { class: name === G.me.name && t === G.me.team ? 'me' : '' }, h('span', null, name), h('b', null, caps ? caps + ' захв.' : '—')))));
+  }
+  const LG_A = { color: '#1c4fd8', color2: '#ffffff' }, LG_B = { color: '#e03131', color2: '#1d1d1b' }; // образцы для легенды
   function showLegend() {
     const row = (svgNode, title, text) => h('div', { class: 'lg-row' }, h('span', { class: 'lg-ico' }, svgNode), h('div', null, h('b', null, title), h('span', null, text)));
     const ico = (build) => { const s = sv('svg', { viewBox: '-20 -20 40 40', width: 40, height: 40 }); build(s); return s; };
     const m = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'sheet legend-sheet' },
       h('h2', null, 'Как читать карту'),
-      row(ico((s) => s.append(nodeShape('node', '#fbf6e6'))), 'Узел · 1 очко', 'Обычная точка сети.'),
-      row(ico((s) => s.append(nodeShape('server', '#fbf6e6'))), 'Сервер · 3 очка', 'Ценнее обычного узла.'),
-      row(ico((s) => s.append(nodeShape('core', '#fbf6e6'))), 'Ядро цеха · 5 очков', 'Одно на цех. Держите больше половины цеха — ещё +10.'),
-      row(ico((s) => s.append(nodeShape('base', '#2f6fb5'))), 'База группы', 'Отсюда растёт сеть. Захватить нельзя.'),
-      row(ico((s) => s.append(nodeShape('base', T_COLOR, { teach: true }))), 'База преподавателей', 'В Учительской. Преподаватели играют одной командой на общей карте.'),
-      row(ico((s) => { s.append(nodeShape('node', '#fbf6e6')); s.append(badge('plus')); }), 'Можно захватить', 'Свободный узел рядом с вашей сетью: 1 ⚡ и лёгкая задача.'),
-      row(ico((s) => { s.append(nodeShape('node', '#c2381f')); s.append(badge('attack')); }), 'Можно атаковать', 'Узел соперника на границе: 2 ⚡ + щиты, задача сложнее.'),
-      row(ico((s) => { s.append(nodeShape('node', '#2f6fb5')); s.append(badge('shield', 2)); }), 'Щиты', 'Каждый щит делает атаку на 1 ⚡ дороже. Захват сбрасывает щиты.'),
-      row(ico((s) => { const g = nodeShape('node', 'url(#hatchLg)'); s.innerHTML = '<defs><pattern id="hatchLg" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#8f8668" stroke-width="2"/></pattern></defs>'; s.append(g); s.append(badge('cut')); }), 'Отрезан от базы', 'Не приносит очков, пока связь не восстановлена.'),
-      row(ico((s) => { s.append(sv('circle', { r: 15, fill: 'rgba(255,207,63,.25)', stroke: '#e0a100', 'stroke-width': 2 })); s.append(nodeShape('node', PAPER)); const b = badge('hot'); b.setAttribute('transform', 'translate(9 -9) scale(.9)'); s.append(b); }), 'Горячая точка', 'Каждый день новая. Пока узел ваш — +10 очков.'),
+      row(ico((s) => s.append(nodeShape('node', null))), 'Свободный узел · 1 очко', 'Ничей: пустой кружок с пунктирным контуром.'),
+      row(ico((s) => s.append(nodeShape('node', LG_A))), 'Узел команды', 'Заливка — основной цвет команды, точка — второй. У каждой группы своё сочетание, как на значке в рейтинге.'),
+      row(ico((s) => s.append(nodeShape('server', LG_A))), 'Сервер · 3 очка', 'Стойка с полками. Ценнее обычного узла.'),
+      row(ico((s) => s.append(nodeShape('core', LG_A))), 'Ядро цеха · 5 очков', 'Одно на цех. Держите больше половины цеха — ещё +10.'),
+      row(ico((s) => s.append(nodeShape('base', LG_A))), 'База группы', 'Шестигранник с флажком. Отсюда растёт сеть, захватить нельзя. Три соседних узла — «домашние»: задачи на них по специальности группы.'),
+      row(ico((s) => s.append(nodeShape('base', { color: T_COLOR, color2: T_COLOR2 }, { teach: true }))), 'База преподавателей', 'В Учительской. Преподаватели играют одной командой на общей карте.'),
+      row(ico((s) => { s.append(nodeShape('node', null)); s.append(badge('plus')); }), 'Можно захватить', 'Синий плюс: свободный узел рядом с вашей сетью — 1 ⚡ и задача (в понедельник — 0 ⚡ и мини-игра).'),
+      row(ico((s) => { s.append(nodeShape('node', LG_B)); s.append(badge('attack')); }), 'Можно атаковать', 'Красный прицел: узел соперника на границе — 2 ⚡ + щиты, задача сложнее.'),
+      row(ico((s) => { s.append(nodeShape('node', LG_A)); s.append(badge('shield', 2)); }), 'Щиты', 'Каждый щит делает атаку на 1 ⚡ дороже. Захват сбрасывает щиты.'),
+      row(ico((s) => { const g = nodeShape('node', LG_A, { cut: true }); g.querySelectorAll('[fill="url(#hatchCut)"]').forEach((el) => el.setAttribute('fill', 'url(#hatchLg)')); s.innerHTML = '<defs><pattern id="hatchLg" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#8f8668" stroke-width="2"/></pattern></defs>'; s.append(g); s.append(badge('cut')); }), 'Отрезан от базы', 'Не приносит очков, пока связь не восстановлена.'),
+      row(ico((s) => { s.append(sv('circle', { r: 15, fill: 'rgba(255,207,63,.25)', stroke: '#e0a100', 'stroke-width': 2 })); s.append(nodeShape('node', null)); const b = badge('hot'); b.setAttribute('transform', 'translate(9 -9) scale(.9)'); s.append(b); }), 'Горячая точка', 'Каждый день новая. Пока узел ваш — +10 очков.'),
       row(ico((s) => { s.append(sv('rect', { x: -18, y: -9, width: 36, height: 18, rx: 9, fill: PAPER, stroke: '#9a5a2c', 'stroke-width': 1.6 })); s.append(sv('circle', { cx: 8, cy: 0, r: 5.5, fill: '#2f8a46', stroke: INK, 'stroke-width': 1.4 })); s.append(sv('path', { d: 'M-12 0h11', stroke: '#9a5a2c', 'stroke-width': 2.4, 'stroke-linecap': 'round' })); }), 'Табличка цеха', 'Цветная точка — команда, которая держит больше половины цеха (+10 очков). Пунктир — цех ничей.'),
       row(ico((s) => { s.append(sv('path', { d: 'M-18 0H-7M7 0H18', stroke: '#6a6452', 'stroke-width': 5 })); s.append(sv('path', { d: 'M-7 0V-14A14 14 0 0 1 7 0', fill: 'none', stroke: '#9a9070', 'stroke-width': 1.2 })); s.append(sv('line', { x1: 0, y1: -16, x2: 0, y2: 16, stroke: '#a39770', 'stroke-width': 2.2 })); }), 'Стены и двери', 'Кабели идут между цехами только через дверные проёмы.'),
       h('button', { class: 'btn', type: 'button', onclick: () => m.remove() }, 'Понятно')));
@@ -793,17 +1003,33 @@
   }
 
   // ---------- взлом ----------
+  // двойное нажатие «Взломать» не должно выдавать вторую задачу, пока первая ещё грузится
+  let hacking = false;
   async function hack(L, n, action) {
+    if (hacking || document.querySelector('.hack-modal')) return;
+    hacking = true;
+    try { await openHack(L, n, action); } finally { hacking = false; }
+  }
+  async function openHack(L, n, action) {
     const me = G.me; let v, c, token;
     if (G.live) {
-      if (document.querySelector('.hack-modal')) return;
-      try { const t = await rpc('g_task', { p_code: G.code, p_node: n.id, p_action: action }); v = { type: t.task.type, payload: t.task, pool: t.pool, tpl: t.tpl }; c = t.cost; token = t.token; me.energy = t.energy; }
+      let t;
+      try { t = await rpc('g_task', { p_code: G.code, p_node: n.id, p_action: action }); }
       catch (e) { toast(errText(e), true); pollLive(); return; }
-    } else { c = cost(G, L, n, action); v = pickTask(action, n); }
+      if (t.error) { toast(t.error === 'RELOGIN' ? 'Сессия устарела — входим заново…' : ERR.BAD_CODE, true); setTimeout(() => location.reload(), 1200); return; }
+      me.energy = t.energy; c = t.cost; token = t.token;
+      if (t.arcade) return playArcade(L, n, action, t.arcade, token);
+      v = { type: t.task.type, payload: t.task, pool: t.pool, tpl: t.tpl };
+    } else {
+      c = cost(G, L, n, action);
+      if (c === 0 && action !== 'attack') return playArcade(L, n, action, ARCADE.KINDS[Math.floor(Math.random() * 3)], null);
+      v = pickTask(L, action, n, me.team); if (action === 'attack') me.energy -= c; // атака оплачивается сразу
+    }
     G.lastTask = v;
     const R = RENDER[v.type](v.payload.data || {});
     const go = h('button', { class: 'btn', type: 'button', disabled: true }, { capture: 'Взломать', attack: 'Атаковать', fortify: 'Укрепить' }[action] + ' · ' + c + ' ⚡');
-    const no = h('button', { class: 'btn ghost', type: 'button' }, 'Отмена');
+    const noCancel = action === 'attack'; // атаку отменить нельзя: ⚡ уже списана
+    const no = noCancel ? null : h('button', { class: 'btn ghost', type: 'button' }, 'Отмена');
     R.onchange = () => { go.disabled = !R.ready(); };
     const d = v.payload.data || {};
     const sheet = h('div', { class: 'sheet task screws hack' },
@@ -811,29 +1037,32 @@
       h('div', { class: 'tasktitle' }, v.payload.title), h('div', { class: 'task-text' }, v.payload.text),
       v.pool === 'boss' && THEORY_OF[v.tpl] ? h('details', { class: 'th-inline' }, h('summary', null, '📘 Как решать такие задачи'), theoryCard(THEORY_OF[v.tpl])) : null,
       typeof d.code === 'string' ? h('pre', { class: 'code' }, d.code) : null, d.table && v.type !== 'rows' ? table(d.table) : null,
-      R.el, h('div', { class: 'row2' }, no, go));
+      R.el, noCancel ? h('p', { class: 'small muted', style: 'margin:0' }, `Атака начата: ${c} ⚡ уже списано, отменить нельзя.`) : null,
+      noCancel ? go : h('div', { class: 'row2' }, no, go));
     const m = h('div', { class: 'modal hack-modal', role: 'dialog', 'aria-modal': 'true' }, sheet);
-    no.onclick = () => m.remove();
-    const result = (cls, icon, title, text) => sheet.replaceChildren(h('div', { class: 'result ' + cls },
+    if (no) no.onclick = () => m.remove();
+    const toMapBtn = h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); showGame(); if (G.live) pollLive(); } }, 'На карту');
+    const result = (cls, icon, title, text, back) => sheet.replaceChildren(h('div', { class: 'result ' + cls },
       h('div', { class: 'res-icon' }, icon), h('h2', null, title), h('p', null, text),
       h('p', { class: 'small muted' }, 'Осталось энергии: ⚡ ' + me.energy),
-      h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); showGame(); if (G.live) pollLive(); } }, 'На карту')));
+      // оплаченная атака, ответ на которую не дошёл: задача на сервере жива — вернуться к ней и отправить ещё раз
+      back ? h('div', { class: 'row2' }, toMapBtn, h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); hack(L, n, 'attack'); } }, 'Вернуться к атаке')) : toMapBtn));
     go.onclick = async () => {
       const conn = connected(L, me.team), from = action === 'fortify' ? null : L.adj[n.id].find((u) => conn.has(u));
       let ok;
       if (G.live) {
-        go.disabled = true; no.disabled = true; go.textContent = 'Проверяем…';
+        go.disabled = true; if (no) no.disabled = true; go.textContent = 'Проверяем…';
         let r; try { r = await rpc('g_answer', { p_token: token, p_answer: R.value() }); } catch (e) { r = { status: 'error', msg: errText(e) }; }
         if (r.node) { const [id, owner, shield] = r.node; const x = L.nodes[id]; x.owner = owner; x.shield = shield; }
         if (r.energy != null) me.energy = r.energy;
-        if (r.status === 'changed') return result('no', '↻', 'Узел изменился', 'Пока вы решали, узел успел захватить или укрепить кто-то другой. Энергия не потрачена — посмотрите на карту ещё раз.');
+        if (r.status === 'changed') return result('no', '↻', 'Узел изменился', `Пока вы решали, узел успел захватить или укрепить кто-то другой. ${action === 'attack' ? 'Энергия возвращена' : 'Энергия не потрачена'} — посмотрите на карту ещё раз.`);
         if (r.status === 'no_energy') return result('no', '⚡', 'Не хватает энергии', 'Энергия не потрачена. Новая приходит каждые 2 часа.');
-        if (r.status === 'error') return result('no', '!', 'Ответ не отправлен', r.msg);
+        if (r.status === 'error') return result('no', '!', 'Ответ не отправлен', r.msg + (action === 'attack' ? ' Атака уже оплачена — вернитесь к ней и отправьте ответ ещё раз.' : ''), action === 'attack');
         ok = r.status === 'ok'; c = r.cost != null ? r.cost : c;
         if (ok) { me.captures += action === 'fortify' ? 0 : 1; G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
       } else {
         ok = check(v.type, v.answer, R.value());
-        me.energy -= c;
+        if (action !== 'attack') me.energy -= c;
         if (ok) { const prev = apply(L, n, me.team, action, me.name); me.captures += action === 'fortify' ? 0 : 1; L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
       }
       if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.`);
@@ -842,17 +1071,67 @@
     document.body.append(m);
   }
 
+  // бесплатное действие: вместо задачи — короткая аркада. Не прошёл — можно сразу ещё раз.
+  // Сервер не засчитает победу быстрее, чем аркаду можно пройти, поэтому слишком быстрая победа чуть ждёт.
+  const ARC_MIN = { lock: 3500, pipes: 4500, packet: 9500 };
+  function playArcade(L, n, action, kind, token) {
+    const me = G.me, t0 = Date.now(), verb = { capture: 'Взлом', fortify: 'Укрепление' }[action] || 'Взлом';
+    let game = null;
+    const m = h('div', { class: 'modal hack-modal', role: 'dialog', 'aria-modal': 'true' });
+    const sheet = h('div', { class: 'sheet task screws hack arcade-sheet' });
+    m.append(sheet);
+    const close = () => { if (game) game.stop(); m.remove(); };
+    const toMap = () => { close(); showGame(); if (G.live) pollLive(); };
+    const result = (cls, icon, title, text, again) => sheet.replaceChildren(h('div', { class: 'result ' + cls },
+      h('div', { class: 'res-icon' }, icon), h('h2', null, title), h('p', null, text),
+      again ? h('div', { class: 'row2' }, h('button', { class: 'btn ghost', type: 'button', onclick: toMap }, 'На карту'), h('button', { class: 'btn', type: 'button', onclick: () => { close(); hack(L, n, action); } }, 'Ещё раз'))
+        : h('button', { class: 'btn', type: 'button', onclick: toMap }, 'На карту')));
+    const finish = async (win) => {
+      if (game) game.stop();
+      let ok = win;
+      if (G.live) {
+        sheet.replaceChildren(h('div', { class: 'result' }, h('div', { class: 'spin' }), h('p', null, 'Отправляем результат…')));
+        const wait = win ? ARC_MIN[kind] - (Date.now() - t0) : 0;
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        let r; try { r = await rpc('g_answer', { p_token: token, p_answer: { win: !!win } }); } catch (e) { r = { status: 'error', msg: errText(e) }; }
+        if (r.node) { const [id, owner, shield] = r.node; const x = L.nodes[id]; x.owner = owner; x.shield = shield; }
+        if (r.energy != null) me.energy = r.energy;
+        if (r.status === 'changed') return result('no', '↻', 'Узел изменился', 'Пока вы играли, узел успел захватить или укрепить кто-то другой. Посмотрите на карту ещё раз.');
+        if (r.status === 'expired') return result('no', '🌙', 'Начался новый день', 'Бесплатная мини-игра действовала до полуночи. Посмотрите, что изменилось на карте.');
+        if (r.status === 'error') return result('no', '!', 'Результат не отправлен', r.msg, true);
+        ok = r.status === 'ok';
+      } else if (win) { const prev = apply(L, n, me.team, action, me.name); L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); }
+      if (ok) {
+        const conn = connected(L, me.team), from = action === 'fortify' ? null : L.adj[n.id].find((u) => u !== n.id && conn.has(u));
+        me.captures += action === 'fortify' ? 0 : 1; G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id;
+        result('ok', '✓', action === 'fortify' ? 'Щит установлен!' : 'Узел захвачен!', action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.`);
+      } else result('no', '✗', 'Не получилось', 'Сегодня это действие бесплатное — энергия не потрачена. Попробуйте ещё раз: игра может смениться.', true);
+    };
+    const intro = ARCADE.INFO[kind];
+    sheet.append(
+      h('div', { class: 'hack-head' }, h('span', { class: 'eyebrow' }, verb + ' · ' + nodeTitle(L, n)), h('span', { class: 'pts' }, '0 ⚡')),
+      h('div', { class: 'tasktitle' }, intro.title), h('div', { class: 'task-text' }, intro.text),
+      h('p', { class: 'small muted', style: 'margin:0' }, 'Сегодня это действие бесплатное: вместо задачи — мини-игра. Не вышло — можно сразу ещё раз.'),
+      h('div', { class: 'row2' }, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Отмена'),
+        h('button', { class: 'btn', type: 'button', onclick: () => {
+          game = ARCADE[kind](finish);
+          sheet.replaceChildren(h('div', { class: 'hack-head' }, h('span', { class: 'eyebrow' }, verb + ' · ' + nodeTitle(L, n)), h('span', { class: 'pts' }, game.title)), game.el,
+            h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Сдаться'));
+        } }, 'Начать')));
+    document.body.append(m);
+  }
+
   // ---------- рейтинг, журнал, итоги ----------
   // итог недели = копилка (счёт, записанный в каждую полночь) + счёт сегодняшнего дня
   function standings(L) { const ev = evOf(G); return L.teams.map((t, i) => { const live = score(L, i, ev), bank = (L.banked && L.banked[i]) || 0; return { t, i, live, bank, s: bank + live, nodes: connected(L, i).size - 1 }; }).sort((a, b) => b.s - a.s || b.live - a.live || b.nodes - a.nodes); }
   function rankView(L) {
-    const rows = standings(L), max = Math.max(1, rows[0].s);
+    const rows = standings(L), max = Math.max(1, rows[0].s), bestGroup = rows.find((r) => !r.t.teach);
     const hk = G.live ? (G.top || []).map(([who, t, v]) => ({ who, t, v })) : Object.entries(L.hackers).map(([k, v]) => { const [who, t] = k.split('|'); return { who, t: +t, v }; }).filter((x) => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8);
     return h('div', { class: 'rank' },
       h('section', { class: 'sheet' }, h('h2', null, 'Рейтинг команд'), h('p', { class: 'small muted', style: 'margin:0' }, G.day > 1 ? 'Итог недели: каждую полночь счёт команды записывается в копилку. Под названием: копилка + счёт сегодня.' : 'Итог недели: каждую полночь счёт команды записывается в копилку, к ней прибавляется счёт следующих дней.'),
         h('ol', { class: 'standings' }, ...rows.map((r, k) => h('li', { class: (r.i === G.me.team ? 'me' : '') + (r.t.teach ? ' teach' : '') },
-          h('span', { class: 'st-n' }, String(k + 1)), h('span', { class: 'swatch', style: `background:${r.t.color}` }),
-          h('span', { class: 'st-name' }, r.t.name, h('small', null, r.t.teach ? ` · ${r.t.members} преп.` : ` · ${r.t.members} уч.`), G.day > 1 ? h('small', { class: 'st-day', title: 'копилка прошлых дней + счёт сегодня' }, `${r.bank} + ${r.live} сегодня`) : null),
+          h('span', { class: 'st-n' }, String(k + 1)), h('span', { class: 'swatch', style: swatchStyle(r.t) }),
+          h('span', { class: 'st-name' }, r.t.name, h('small', null, r.t.teach ? ` · ${r.t.members} преп.` : ` · ${r.t.members} уч.`), r === bestGroup && r.s > 0 ? h('small', { class: 'st-best' }, ' · лучшая группа') : null, G.day > 1 ? h('small', { class: 'st-day', title: 'копилка прошлых дней + счёт сегодня' }, `${r.bank} + ${r.live} сегодня`) : null),
           h('span', { class: 'st-bar' }, h('i', { style: `width:${Math.round(r.s / max * 100)}%;background:${r.t.color}` })),
           h('span', { class: 'st-s' }, String(r.s)))))),
       h('section', { class: 'printout' }, h('h3', null, 'Лучшие взломщики'),
@@ -870,13 +1149,16 @@
   function logView(L) {
     return h('section', { class: 'sheet' }, h('h2', null, 'Журнал сети'),
       h('ul', { class: 'netlog' }, ...L.log.slice(0, 60).map((e) => h('li', { class: e.me ? 'me' : e.prev === G.me.team ? 'hit' : '' },
-        h('span', { class: 'swatch', style: `background:${L.teams[e.t].color}` }), h('span', { class: 'lg-d' }, 'день ' + e.day), h('span', null, logText(L, e))))));
+        h('span', { class: 'swatch', style: swatchStyle(L.teams[e.t]) }), h('span', { class: 'lg-d' }, 'день ' + e.day), h('span', null, logText(L, e))))));
   }
   function finalView(L) {
-    const rows = standings(L);
+    const rows = standings(L), best = rows.find((r) => !r.t.teach), teach = rows.find((r) => r.t.teach);
     return h('section', { class: 'sheet final screws' }, h('h2', null, G.over ? 'Итоги турнира' : 'Финальный день'), h('p', { class: 'small muted', style: 'margin:0' }, G.over ? `Игра завершена ${finalText(0)}.` : `Итоги — ${finalText(G.day)}. Сейчас — по текущему счёту.`),
-      h('div', { class: 'podium' }, ...rows.slice(0, 3).map((r, i) => h('div', { class: 'pd pd' + (i + 1) }, h('span', { class: 'swatch', style: `background:${r.t.color}` }), h('b', null, r.t.name), h('span', null, r.s + ' очков'), h('i', null, ['🥇', '🥈', '🥉'][i])))),
-      rows.slice(0, 3).some((r) => r.t.teach) ? h('p', { class: 'small', style: 'margin:0' }, 'Лучшая группа студентов: ', h('b', null, rows.find((r) => !r.t.teach).t.name)) : null);
+      h('div', { class: 'podium' }, ...rows.slice(0, 3).map((r, i) => h('div', { class: 'pd pd' + (i + 1) }, h('span', { class: 'swatch', style: swatchStyle(r.t) }), h('b', null, r.t.name), h('span', null, r.s + ' очков'), h('i', null, ['🥇', '🥈', '🥉'][i])))),
+      // награждаются и преподаватели, и лучшая группа студентов
+      h('div', { class: 'final-two' },
+        h('p', { style: 'margin:0' }, '🏆 Лучшая группа студентов: ', h('b', null, best.t.name), ` — ${best.s} очк.`),
+        teach ? h('p', { style: 'margin:0' }, '🎓 Преподаватели: ', h('b', null, (rows.indexOf(teach) + 1) + '-е место'), ` — ${teach.s} очк.`) : null));
   }
 
   function skip(mins) {
@@ -886,14 +1168,16 @@
   // утренняя сводка: что перевернулось за ночь
   function showBrief(b) {
     const L = G.L, ev = DAYS[b.day], hot = L.hot != null ? L.nodes[L.hot] : null;
-    const close = () => { m.remove(); if (mapRefs) mapRefs.flash(b.hit); };
+    // на карту: сначала анимация события (как в трейлере), потом вспышки на изменившихся узлах
+    const toMap = (after) => { m.remove(); if (G.view !== 'map') { G.view = 'map'; showGame(); } if (mapRefs) mapRefs.dayFx(b.day, () => { if (after) after(); mapRefs.flash(b.hit); }); };
+    const close = () => toMap();
     const m = h('div', { class: 'modal brief-modal', role: 'dialog', 'aria-modal': 'true' }, h('div', { class: 'sheet brief screws' },
       h('span', { class: 'eyebrow' }, `День ${b.day} из ${LAST_DAY} · ${dayDate(b.day).wd}, ${dayDate(b.day).text}`),
       h('h2', null, ev.t), h('p', { style: 'margin:0' }, evText(ev, b.day)),
       b.lines.length || b.before != null ? h('div', { class: 'brief-box' }, h('b', null, 'Что изменилось на поле'), h('ul', null, ...b.lines.map((x) => h('li', null, x)), b.before != null ? h('li', null, 'Счёт вашей команды на сегодня после события: ', `${b.before} → `, h('b', null, `${b.after} очк.`)) : null)) : null,
       hot ? h('p', { class: 'brief-hot', style: 'margin:0' }, '🔥 Горячая точка дня: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ' — +10 очков, пока узел ваш.') : null,
       h('div', { class: 'row2' }, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'На карту'),
-        hot ? h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); if (mapRefs) mapRefs.flash(b.hit); } }, 'К горячей точке') : null)));
+        hot ? h('button', { class: 'btn', type: 'button', onclick: () => toMap(() => { G.sel = hot.id; mapRefs.draw(); mapRefs.drawSheet(); mapRefs.flyTo(hot.x, hot.y, 380); }) }, 'К горячей точке') : null)));
     document.body.append(m);
   }
 

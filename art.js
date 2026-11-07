@@ -1,16 +1,23 @@
-// Иллюстрации турнира: робот, семисегментное табло, перфокарта, радиолампа, резистор, шестерни.
+// Иллюстрации турнира: робот с шестернёй ИТМ, семисегментное табло, перфокарта, радиолампа, резистор, шестерни.
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs, kids) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (kids || []).forEach((c) => e.append(c)); return e; };
 
-  // ---------- Робот с дискетой (пиксель-арт 36×43 с объёмом) ----------
+  // ---------- Робот с шестернёй ИТМ (пиксель-арт 46×53 с объёмом) ----------
+  // Буквы «ИТМ» 5×6 в полупикселях — иначе в шестерню размером с голову робота они не помещаются.
+  const ITM_GLYPHS = [
+    ['X...X', 'X...X', 'X..XX', 'X.X.X', 'XX..X', 'X...X'],
+    ['XXXXX', '..X..', '..X..', '..X..', '..X..', '..X..'],
+    ['X...X', 'XX.XX', 'X.X.X', 'X...X', 'X...X', 'X...X'],
+  ];
   function robot() {
     const C = { o: '#2b3236', l: '#dfe7e9', m: '#a9b6bb', d: '#6f7d82', s: '#a8e6d2', sh: '#d6f8ec', e: '#1f2b28', w: '#ffffff', p: '#f29b8a', r: '#e04a2a', rh: '#ff9f80', lb: '#0e1d13', lc: '#86f29a', y: '#ffcf3f', g: '#4cd964', n: '#20406a', nh: '#335a8a', sm: '#c9d3d6', lab: '#f7f0dc', ln: '#9aa7ac' };
-    const svg = el('svg', { viewBox: '0 0 36 43', class: 'robot', 'aria-hidden': 'true', 'shape-rendering': 'crispEdges' });
-    let tgt = svg; const R = (x, y, w, h, c, cls) => { const r = el('rect', { x, y, width: w + 0.02, height: h + 0.02, fill: C[c] || c }); if (cls) r.setAttribute('class', cls); tgt.append(r); return r; };
+    const svg = el('svg', { viewBox: '0 0 46 53', class: 'robot', 'aria-hidden': 'true', 'shape-rendering': 'crispEdges' });
+    const OY = 10; // запас сверху: над поднятой рукой — шестерня
+    let tgt = svg; const R = (x, y, w, h, c, cls) => { const r = el('rect', { x, y: y + OY, width: w + 0.02, height: h + 0.02, fill: C[c] || c }); if (cls) r.setAttribute('class', cls); tgt.append(r); return r; };
     const grp = (cls) => { const g = el('g', { class: cls }); svg.append(g); tgt = g; return g; };
     const box = (x, y, w, h, fill, hi, lo) => { R(x, y, w, h, 'o'); R(x + 1, y + 1, w - 2, h - 2, fill); if (hi) R(x + 1, y + 1, w - 2, 1, hi); if (lo) R(x + 1, y + h - 2, w - 2, 1, lo); };
-    svg.append(el('ellipse', { cx: 17, cy: 41.6, rx: 12, ry: 1.2, fill: 'rgba(0,0,0,.18)' }));
+    svg.append(el('ellipse', { cx: 17, cy: 41.6 + OY, rx: 12, ry: 1.2, fill: 'rgba(0,0,0,.18)' }));
     // антенна
     R(15, 2, 2, 4, 'o'); R(16, 3, 1, 3, 'd'); grp('r-ant'); box(13, 0, 6, 3, 'r'); R(14, 1, 1, 1, 'rh'); tgt = svg;
     // уши-болты
@@ -31,12 +38,40 @@
     [[8, 22], [23, 22], [8, 32], [23, 32]].forEach(([x, y]) => R(x, y, 1, 1, 'd'));
     // левая рука
     box(2, 22, 5, 4, 'd', 'm'); box(2, 25, 4, 8, 'm', 'l', 'd'); box(1, 32, 6, 3, 'd', 'm');
-    // правая рука вверх с дискетой
-    box(25, 21, 5, 4, 'd', 'm'); grp('r-arm'); box(27, 14, 4, 9, 'm', 'l', 'd'); box(26, 12, 6, 3, 'd', 'm');
-    box(25, 2, 10, 11, 'n', 'nh'); R(28, 3, 5, 3, 'sm'); R(31, 3, 1, 3, 'o'); box(27, 7, 7, 5, 'lab'); R(28, 9, 5, 1, 'ln'); R(28, 10, 3, 1, 'ln'); R(26, 3, 1, 1, 'o'); tgt = svg;
+    // правая рука вверх с шестернёй ИТМ
+    box(25, 21, 5, 4, 'd', 'm'); grp('r-arm');
+    box(28, 20, 6, 4, 'm', 'l', 'd'); box(33, 11, 4, 8, 'm', 'l', 'd'); box(32, 18, 6, 5, 'd', 'm');
+    gear(35, 1); box(32, 9, 6, 3, 'd', 'm'); R(33, 10, 1, 1, 'l'); tgt = svg;
     // ноги
     box(10, 33, 5, 6, 'm', 'l', 'd'); box(17, 33, 5, 6, 'm', 'l', 'd'); box(8, 38, 8, 3, 'd', 'm'); box(16, 38, 8, 3, 'd', 'm');
     return svg;
+
+    // шестерня как на логотипе ИТМ: синяя, с золотым кантом, голубой круг с золотым ободком, белые буквы
+    function gear(cx, cy) {
+      const N = 8, RT = 10.2, RB = 7.6, TW = 4.2, RD = 5.4, step = 2 * Math.PI / N;
+      const inside = (x, y) => {
+        const dx = x + .5 - cx, dy = y + .5 - cy, r = Math.hypot(dx, dy);
+        if (r <= RB) return true; if (r > RT) return false;
+        const a = Math.atan2(dy, dx) + Math.PI / 2, da = a - Math.round(a / step) * step;
+        return Math.cos(da) > 0 && Math.abs(r * Math.sin(da)) <= TW / 2;
+      };
+      for (let y = Math.floor(cy - RT) - 1; y <= Math.ceil(cy + RT); y++) for (let x = Math.floor(cx - RT) - 1; x <= Math.ceil(cx + RT); x++) {
+        const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([u, v]) => inside(x + u, y + v));
+        if (!inside(x, y)) { if (nb.some(Boolean)) R(x, y, 1, 1, 'o'); continue; }
+        const dx = x + .5 - cx, dy = y + .5 - cy, r = Math.hypot(dx, dy), lit = dx + dy;
+        let c;
+        if (!nb.every(Boolean)) c = lit > 2 ? '#d88a17' : '#ffbf3f';          // золотой кант
+        else if (r <= RD) c = lit < -3.5 ? '#6db8ff' : lit > 4 ? '#1c6fe0' : '#2f8cff'; // голубой круг
+        else if (r <= RD + 1) c = lit > 3 ? '#e0a21c' : '#ffd24a';           // ободок
+        else c = lit < -4 ? '#4f63ff' : lit > 4 ? '#1622b0' : '#2433e0';      // синее тело
+        R(x, y, 1, 1, c);
+      }
+      // буквы: тень на полпикселя вправо-вниз, сверху — белые
+      const S = .5, W = (5 * 3 + 2) * S, x0 = cx - W / 2, y0 = cy - 3 * S;
+      [['#0b2a78', S], ['#ffffff', 0]].forEach(([col, off]) => ITM_GLYPHS.forEach((g, i) => g.forEach((row, j) => [...row].forEach((ch, k) => {
+        if (ch === 'X') R(x0 + (i * 6 + k) * S + off, y0 + j * S + off, S, S, col);
+      }))));
+    }
   }
 
   // ---------- Семисегментное табло ----------

@@ -87,11 +87,16 @@ details.event[open]>summary{margin-bottom:4px}
 .sh-txt b{display:block;font:var(--display-w) 1.15rem var(--font-display);letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sh-meta{display:flex;gap:10px;align-items:center;font-size:.85rem;color:var(--muted)}
 .sh-why{margin:0;font-size:.9rem}
+.roster-btn{padding:10px 14px;font-size:.95rem}.roster-btn small{font-weight:400;letter-spacing:0;text-transform:none}
+.roster-head{display:flex;gap:10px;align-items:center}.roster-head h2{margin:0}
+.roster-list{margin:0;padding-left:1.6em;display:grid;gap:2px;max-height:52vh;max-height:52dvh;overflow-y:auto;font-variant-numeric:tabular-nums}
+.roster-list li{padding:6px 4px;border-bottom:1px dashed var(--line)}.roster-list li span{display:inline-block;min-width:60%}.roster-list li b{float:right;font-weight:600;color:var(--muted)}
+.roster-list li.me{font-weight:700;color:var(--accent-dk)}
 .np-acts .btn{display:flex;justify-content:center;align-items:baseline;gap:6px;padding:12px 14px}
 .np-acts .btn small{font:600 .8rem var(--font-body);letter-spacing:0;text-transform:none;opacity:.9}
 .btn-atk{background:linear-gradient(#e2533b,#c2381f);border-color:#8a2412;box-shadow:inset 0 -4px 0 rgba(0,0,0,.18),0 3px 0 #8a2412}
 .mini{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font:700 .85rem/1 var(--font-body);font-style:normal;color:#fff;border:1.5px solid #2b2a22;vertical-align:-3px}
-.mini.plus{background:#ec6a1c}.mini.atk{background:#c2381f}
+.mini.plus{background:#1971c2}.mini.atk{background:#e03131}
 .coach{border-color:var(--accent-dk)}
 .coach h3{font-size:1.1rem}
 .coach-steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;font-size:.95rem}
@@ -188,6 +193,52 @@ details.event[open]>summary{margin-bottom:4px}
 .brief-hot{background:#fff3c4;border:1.5px solid #e0a100;border-radius:8px;padding:8px 10px;font-size:.92rem}
 @media (prefers-reduced-motion:reduce){.reach,.flash-n,.toast,.na-n,.my-edge,.mybase,.reticle,.bob,.map-sheet.open,.hotring{animation:none}
 details.event>summary::after{transition:none}}
+.st-name small.st-best{display:inline;color:#2f8a46;font-weight:700}
+.final-two{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:8px;background:rgba(47,138,70,.1)}
+/* утренние анимации событий дня (как в трейлере) */
+.fx-spark{opacity:0;transform-box:fill-box;transform-origin:center;animation:fxSpark .7s ease-out forwards}
+@keyframes fxSpark{0%{opacity:0;transform:scale(.4)}25%{opacity:.95;transform:scale(1.25)}100%{opacity:0;transform:scale(1.9)}}
+.fx-dark{opacity:0;animation:fxDark 3s linear forwards}
+@keyframes fxDark{0%{opacity:0}6%{opacity:.6}9%{opacity:.1}14%{opacity:.65}18%{opacity:.15}24%,82%{opacity:.62}100%{opacity:0}}
+.fx-nopower{font:700 26px/1 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.08em;fill:#ff5544;opacity:0;animation:fxBlink 3s steps(1) forwards}
+@keyframes fxBlink{0%,22%{opacity:0}26%,36%,46%,56%,66%{opacity:1}31%,41%,51%,61%{opacity:.15}86%{opacity:1}100%{opacity:0}}
+.fx-x{opacity:0;animation:fxX 3s linear forwards}
+@keyframes fxX{0%{opacity:0}8%,16%,24%,32%{opacity:1}12%,20%,28%{opacity:.25}85%{opacity:1}100%{opacity:0}}
+.fx-door{stroke-dashoffset:var(--len);animation:fxDoor 2.5s ease-out forwards}
+@keyframes fxDoor{0%{stroke-dashoffset:var(--len);opacity:1}30%{stroke-dashoffset:0}85%{opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+.fx-dim{opacity:0;animation:fxDim 3.2s ease-in-out forwards}
+@keyframes fxDim{0%{opacity:0}12%,85%{opacity:.6}100%{opacity:0}}
+.fx-cone{opacity:0;mix-blend-mode:screen;animation:fxCone 3s ease-in-out forwards}
+@keyframes fxCone{0%{opacity:0}15%,82%{opacity:.4}100%{opacity:0}}
+.fx-spotring{opacity:0;transform-box:fill-box;transform-origin:center;animation:fxRing 2.8s ease-in-out forwards}
+@keyframes fxRing{0%{opacity:0;transform:scale(2.2)}18%{opacity:1;transform:scale(1)}50%{transform:scale(1.15)}82%{opacity:1;transform:scale(1)}100%{opacity:0}}
+.mapwrap.alarm::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:3;background:radial-gradient(ellipse at center,rgba(255,40,30,0) 30%,rgba(255,40,30,.62) 100%);animation:fxAlarm .5s ease-in-out 5 alternate both}
+@keyframes fxAlarm{from{opacity:.15}to{opacity:1}}
+/* аркады бесплатных действий */
+.arcade{display:flex;flex-direction:column;gap:12px;align-items:stretch;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.ar-pins{display:flex;justify-content:center;gap:10px}
+.ar-pin{width:16px;height:30px;border-radius:4px;background:#0e1d13;border:2px solid var(--ink,#2b2a22);transition:background .2s}
+.ar-pin.on{background:#86f29a;box-shadow:0 0 10px rgba(134,242,154,.7)}
+.ar-bar{position:relative;height:56px;border-radius:10px;background:#0e1d13;border:2px solid var(--ink,#2b2a22);overflow:hidden;cursor:pointer}
+.ar-bar.miss{animation:arShake .35s}
+.ar-zone{position:absolute;top:0;bottom:0;background:rgba(134,242,154,.35);border-left:2px solid #86f29a;border-right:2px solid #86f29a}
+.ar-cur{position:absolute;top:4px;bottom:4px;width:6px;margin-left:-3px;border-radius:3px;background:#ffcf3f;box-shadow:0 0 8px #ffcf3f}
+@keyframes arShake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.ar-time{align-self:center;font:700 20px/1 ui-monospace,monospace;padding:6px 12px;border-radius:8px;background:#0e1d13;color:#86f29a}
+.ar-time.warn{color:#ff8a7a}
+.ar-board{display:flex;align-items:stretch;justify-content:center;gap:4px}
+.ar-side{display:grid;grid-template-rows:repeat(4,1fr);width:22px;font-size:18px;text-align:center;align-items:center;color:#2f8a46}
+.ar-side .ar-src,.ar-side .ar-dst{font-weight:700}
+.ar-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;width:min(100%,300px);padding:4px;border-radius:10px;background:#2b2a22}
+.ar-grid.done{box-shadow:0 0 0 3px #86f29a}
+.ar-tile{padding:0;border:0;background:none;aspect-ratio:1;cursor:pointer;border-radius:8px}
+.ar-tile svg{display:block;width:100%;height:100%}
+.ar-tile:focus-visible{outline:3px solid #ffcf3f}
+.ar-prog{height:10px;border-radius:5px;background:#0e1d13;overflow:hidden;border:2px solid var(--ink,#2b2a22)}
+.ar-prog i{display:block;height:100%;width:0;background:#86f29a}
+.ar-stage{position:relative;border-radius:10px;overflow:hidden;border:2px solid var(--ink,#2b2a22)}
+.ar-canvas{display:block;width:100%;height:260px;touch-action:none}
+.ar-hint{position:absolute;inset:0;display:grid;place-items:center;color:#86f29a;font:700 18px/1.2 ui-monospace,monospace;background:rgba(14,29,19,.55);cursor:pointer}
 </style>
 </head>
 <body>
@@ -199,6 +250,7 @@ details.event>summary::after{transition:none}}
 <script src="art.js"></script>
 <script src="mechanics.js"></script>
 <script src="demo-tasks.js"></script>
+<script src="arcade.js"></script>
 <script>
 document.querySelectorAll('[data-art]').forEach(n => { const seed = +n.dataset.seed || 1; n.replaceWith(n.dataset.art === 'card' ? ART.punchCard(seed) : ART.gears()); });
 </script>

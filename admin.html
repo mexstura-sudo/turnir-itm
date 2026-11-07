@@ -89,6 +89,7 @@ input[type=search]{min-width:0}
   th,td{color:#000!important;background:#fff!important;border-bottom:1px solid #999!important}
 }
 .pill.warn{color:#b44b0d;background:#fff1e6;margin-left:6px;vertical-align:1px}
+.pill.twin{color:#1c4fd8;background:#e8efff;margin-left:6px;vertical-align:1px}
 .dlg-back{position:fixed;inset:0;background:rgba(31,61,45,.55);display:grid;place-items:center;padding:16px;z-index:30}
 .dlg{width:min(460px,100%);display:flex;flex-direction:column;gap:10px}
 </style>
@@ -135,8 +136,8 @@ function login(msg){
 
 async function load(){
   try {
-    const [res, codes, gst] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({})), rpc('g_admin_state', { p_key: KEY }).catch(() => null)]);
-    DATA = res; DATA.game = codes || {}; DATA.gstate = gst; ls.set(LS, KEY); render();
+    const [res, codes, gst, bk] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({})), rpc('g_admin_state', { p_key: KEY }).catch(() => null), rpc('g_admin_backups', { p_key: KEY }).catch(() => null)]);
+    DATA = res; DATA.game = codes || {}; DATA.gstate = gst; DATA.backups = bk; DATA.similar = similarNames(res.rows || []); ls.set(LS, KEY); render();
   }
   catch(e){ login(/BAD_KEY/.test(e.message) ? 'Неверный ключ.' : 'Нет связи с сервером: ' + e.message); }
 }
@@ -160,7 +161,7 @@ function render(){
     winners(students, teachers),
     tabs());
   $.append(h('div',{class:'sheet'}, body()));
-  $.append(settingsForm()); if (DATA.gstate) $.append(gameForm());
+  $.append(settingsForm()); if (DATA.gstate) $.append(gameForm(), limitsForm()); if (DATA.backups) $.append(backupsView());
 }
 const stat = (v,l) => h('div',{class:'stat'}, h('b',null,String(v)), h('span',null,l));
 
@@ -179,7 +180,7 @@ function rank(rows, opts={}){
   return h('div',{class:'tbl'}, h('table',null,
     h('thead',null, h('tr',null, h('th',null,'#'), h('th',null,'Участник'), opts.teacher?null:h('th',null,'Группа'), opts.spec?h('th',null,'Специальность'):null, h('th',null,'Баллы'), h('th',null,'Верно'), h('th',null,'Время'), h('th',null,'Задания'), opts.status?h('th',null,'Статус'):null, opts.manage?h('th',null,''):null)),
     h('tbody',null, ...rows.map((r,i)=>h('tr',{class: !opts.status && i<3 ? 'top' : ''},
-      h('td',{class:'place'}, String(i+1)), h('td',null, r.name, suspicious(r.name) ? h('span',{class:'pill warn',title:'Похоже на кличку или ругательство — проверьте и переименуйте или удалите'},'проверьте') : null, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
+      h('td',{class:'place'}, String(i+1)), h('td',null, r.name, suspicious(r.name) ? h('span',{class:'pill warn',title:'Похоже на кличку или ругательство — проверьте и переименуйте или удалите'},'проверьте') : null, DATA.similar && DATA.similar[r.id] ? h('span',{class:'pill twin',title:'В этой же группе: ' + DATA.similar[r.id].join(', ') + '. Возможно, один человек прошёл дважды — проверьте.'},'похожее имя') : null, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
       opts.teacher?null:h('td',null,r.group), opts.spec?h('td',{class:'small'},specName(r.specialty)):null,
       h('td',{class:'num'},String(r.score)), h('td',{class:'num'},`${r.correct}/10`), h('td',{class:'num'},fmtMs(r.time_ms)),
       h('td',null, h('div',{class:'dots'}, ...(r.tasks||[]).map(t=>h('i',{class:t.ok===true?'ok':t.ok===false?'no':'',title:(TPL[t.tpl]||t.tpl)})))),
@@ -187,6 +188,23 @@ function rank(rows, opts={}){
       opts.manage?h('td',null, manage(r)):null)))));
 }
 
+// похожие имена в одной группе: та же фамилия и первая буква имени, одно имя — начало другого,
+// или отличаются на 1–2 буквы (опечатка). Помогает заметить, что человек прошёл олимпиаду дважды.
+function similarNames(rows){
+  const norm = (n) => String(n||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z\s-]/g,'').trim().split(/\s+/);
+  const lev = (a, b) => { if (Math.abs(a.length - b.length) > 2) return 9; let p = Array.from({length:b.length+1},(_,i)=>i); for (let i=1;i<=a.length;i++){ const c=[i]; for (let j=1;j<=b.length;j++) c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); p=c; } return p[b.length]; };
+  const out = {}, by = {};
+  rows.forEach(r => { (by[r.teacher ? '*' : r.group] = by[r.teacher ? '*' : r.group] || []).push(r); });
+  Object.values(by).forEach(list => {
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const a = norm(list[i].name), b = norm(list[j].name), A = a.join(' '), B = b.join(' ');
+      const like = (a[0] === b[0] && a[1] && b[1] && a[1][0] === b[1][0]) || A.startsWith(B + ' ') || B.startsWith(A + ' ') || lev(A, B) <= 2;
+      if (!like) continue;
+      (out[list[i].id] = out[list[i].id] || []).push(list[j].name); (out[list[j].id] = out[list[j].id] || []).push(list[i].name);
+    }
+  });
+  return out;
+}
 const suspicious = (n) => !!(window.ITM_NAMES && window.ITM_NAMES.problem(n));
 const NAME_ERR = { BAD_NAME:'Нужны минимум фамилия и имя.', NAME_RULES:'Только русские буквы, пробел и дефис.', ALREADY:'В этой группе уже есть участник с таким именем.', NOT_FOUND:'Участник уже удалён — обновите страницу.', BAD_KEY:'Ключ устарел — войдите заново.' };
 const nameErr = (e) => { const m = String(e && e.message || e); for (const k in NAME_ERR) if (m.includes(k)) return NAME_ERR[k]; return 'Не получилось: ' + m; };
@@ -280,30 +298,71 @@ function gameForm(){
   const msg = h('p',{class:'small',hidden:true});
   const show = (t, bad) => { msg.hidden = false; msg.className = 'small' + (bad ? ' err' : ''); msg.textContent = t; };
   const resetBox = h('div',{class:'confirm'});
-  const resetIdle = () => resetBox.replaceChildren(h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:resetAsk},'Сбросить поле'));
+  const running = /^Идёт/.test(gamePhase());
+  const resetIdle = () => resetBox.replaceChildren(running
+    ? h('span',{class:'small muted'},'Пока игра идёт, сброс поля отключён. Если что-то пошло не так — восстановите резервную копию ниже.')
+    : h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:resetAsk},'Сбросить поле'));
   const resetAsk = () => resetBox.replaceChildren(
-    h('span',{class:'small'},'Вернуть поле к началу? Все ходы, игроки и журнал удалятся. Коды останутся рабочими.'),
-    h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:async()=>{ try { await rpc('g_admin_reset',{p_key:KEY}); show('Поле сброшено.'); setTimeout(load, 600); } catch(err){ show(err.message, true); } }},'Да, сбросить'),
+    h('span',{class:'small'}, (/^Завершена/.test(gamePhase()) ? '⚠ Игра уже завершена: сброс сотрёт итоги, игроков и топ взломщиков — сначала объявите победителей. ' : '') + 'Вернуть поле к началу? Все ходы, игроки, журнал и резервные копии удалятся. Коды останутся рабочими.'),
+    h('button',{class:'btn danger',type:'button',style:'min-height:40px',onclick:async()=>{ try { await rpc('g_admin_reset',{p_key:KEY}); show('Поле сброшено.'); setTimeout(load, 600); } catch(err){ show(/RUNNING/.test(err.message) ? 'Игра идёт — сброс отключён. Сначала верните дату старта в будущее.' : err.message, true); } }},'Да, сбросить'),
     h('button',{class:'btn ghost',type:'button',style:'padding:6px 10px;font-size:.8rem;min-height:40px',onclick:resetIdle},'Отмена'));
   resetIdle();
   const now = () => { const d = new Date(Date.now() + 8 * 3600e3); return d.toISOString().slice(0, 16); };
   const f = h('form',{class:'sheet'},
     h('h2',null,'Игра «Захват сети»: сроки'),
     h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + DATA.gstate.players),
-    h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Новый игровой день начинается в полночь, всего 5 дней с событиями. Чтобы проверить игру заранее — нажмите «Открыть сейчас», а перед настоящим стартом верните дату и сбросьте поле.'),
+    h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Новый игровой день начинается в полночь, всего 5 дней с событиями. Чтобы проверить игру заранее — нажмите «Открыть сейчас», а перед настоящим стартом верните дату и сбросьте поле. После старта даты лучше не трогать: сдвиг меняет номер дня и события.'),
     h('div',{class:'row'}, h('label',null,'Старт игры', a), h('label',null,'Финиш игры', b),
       h('button',{class:'btn ghost',type:'button',onclick:()=>{ a.value = now(); }},'Открыть сейчас'),
       h('button',{class:'btn',type:'submit'},'Сохранить')),
     resetBox, msg);
+  let warned = false;
   f.addEventListener('submit', async (e) => { e.preventDefault();
+    if (running && !warned && (fromLocal(a.value) !== fromLocal(toLocal(g.starts_at)) || fromLocal(b.value) !== fromLocal(toLocal(g.ends_at)))) { warned = true; show('Игра уже идёт: сдвиг дат поменяет текущий день и события у всех игроков. Если уверены — нажмите «Сохранить» ещё раз.', true); return; }
     try { await rpc('g_admin_settings',{p_key:KEY,p_starts:fromLocal(a.value),p_ends:fromLocal(b.value)}); show('Сохранено.'); setTimeout(load, 600); }
     catch(err){ show(/BAD_DATES/.test(err.message) ? 'Финиш должен быть позже старта.' : err.message, true); } });
   return f;
 }
+// лимит игроков в команде: проверяется при первом входе по коду
+function limitsForm(){
+  const g = DATA.gstate.settings;
+  const a = h('input',{type:'number',min:'1',max:'999',value:String(g.max_group ?? 30),style:'width:110px'}), b = h('input',{type:'number',min:'1',max:'999',value:String(g.max_teach ?? 70),style:'width:110px'});
+  const msg = h('p',{class:'small',hidden:true});
+  const f = h('form',{class:'sheet'}, h('h2',null,'Игра: сколько игроков в команде'),
+    h('p',{class:'small muted',style:'margin:0'},'Когда команда заполнена, новый участник при входе увидит «Команда уже набрана… Напишите организатору турнира». Уже вошедших лимит не касается.'),
+    h('div',{class:'row'}, h('label',null,'В группе студентов', a), h('label',null,'У преподавателей', b), h('button',{class:'btn',type:'submit'},'Сохранить')), msg);
+  f.addEventListener('submit', async (e) => { e.preventDefault(); msg.hidden = false;
+    try { await rpc('g_admin_limits',{p_key:KEY,p_group:+a.value||null,p_teach:+b.value||null}); msg.className='small'; msg.textContent='Сохранено.'; setTimeout(load, 600); }
+    catch(err){ msg.className='small err'; msg.textContent = err.message; } });
+  return f;
+}
+// резервные копии поля: каждые 4 часа во время игры + вручную
+function backupsView(){
+  const list = DATA.backups || [], msg = h('p',{class:'small',hidden:true});
+  const show = (t, bad) => { msg.hidden = false; msg.className = 'small' + (bad ? ' err' : ''); msg.textContent = t; };
+  const row = (b) => { const cell = h('td'); const idle = () => cell.replaceChildren(h('button',{class:'btn ghost',type:'button',style:'padding:5px 10px;font-size:.8rem;min-height:34px',onclick:ask},'Восстановить'));
+    const ask = () => cell.replaceChildren(h('span',{class:'small'},'Вернуть поле к ' + fmtDate(b.at) + '? Текущее состояние сначала сохранится копией. Ходы после копии и записи журнала пропадут' + (b.day && DATA.gstate && b.day < DATA.gstate.settings.today ? '; события следующих дней (блэкаут, двери…) сработают заново, копилка за эти дни пересчитается по восстановленному полю' : '') + '. '),
+      h('button',{class:'btn danger',type:'button',style:'min-height:34px',onclick:async()=>{ try { await rpc('g_admin_restore',{p_key:KEY,p_id:b.id}); show('Поле восстановлено из копии от ' + fmtDate(b.at) + '.'); setTimeout(load, 600); } catch(err){ show(err.message, true); idle(); } }},'Да'),
+      h('button',{class:'btn ghost',type:'button',style:'padding:5px 10px;font-size:.8rem;min-height:34px',onclick:idle},'Отмена'));
+    idle();
+    return h('tr',null, h('td',null,fmtDate(b.at)), h('td',{class:'num'}, b.day ? 'день ' + b.day : '—'), h('td',null, b.auto ? 'авто' : 'вручную'), h('td',{class:'num'},String(b.owned)), h('td',{class:'num'},String(b.players)), cell); };
+  return h('div',{class:'sheet'}, h('h2',null,'Игра: резервные копии'),
+    h('p',{class:'small muted',style:'margin:0'},'Во время игры копия поля делается сама каждые 4 часа (хранятся последние 60). В копии — владельцы узлов и щиты, двери, копилка, энергия и захваты игроков. Игроки, вошедшие позже копии, при восстановлении остаются.'),
+    h('div',{class:'row'}, h('button',{class:'btn',type:'button',onclick:async(e)=>{ e.currentTarget.disabled = true; try { await rpc('g_admin_backup_now',{p_key:KEY}); show('Копия сделана.'); setTimeout(load, 400); } catch(err){ show(err.message, true); } }},'Сделать копию сейчас')),
+    list.length ? h('div',{class:'tbl'}, h('table',null,
+      h('thead',null,h('tr',null,h('th',null,'Когда'),h('th',null,'День'),h('th',null,'Как'),h('th',null,'Занято узлов'),h('th',null,'Игроков'),h('th',null,''))),
+      h('tbody',null, ...list.map(row)))) : h('p',{class:'muted small',style:'margin:0'},'Копий пока нет.'),
+    msg);
+}
 function gameView(){
   const G = DATA.gstate; if (!G) return h('p',{class:'muted'},'Нет данных игры.');
   const st = G.standings || [], top = G.top || [];
+  const tot = (r) => r.total ?? r.score ?? 0, bestGroup = st.find(r => !r.teacher), teach = st.find(r => r.teacher);
   return h('div',{style:'display:flex;flex-direction:column;gap:14px'},
+    // награждаются оба зачёта: преподаватели и лучшая группа студентов
+    h('div',{class:'stats'},
+      h('div',{class:'stat'}, h('span',null,'🏆 Лучшая группа студентов'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, bestGroup && tot(bestGroup) > 0 ? bestGroup.team : '—'), bestGroup && tot(bestGroup) > 0 ? h('span',null, tot(bestGroup) + ' очк. · ' + (st.indexOf(bestGroup) + 1) + '-е место в общем') : null),
+      h('div',{class:'stat'}, h('span',null,'🎓 Преподаватели'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, teach ? (st.indexOf(teach) + 1) + '-е место' : '—'), teach ? h('span',null, tot(teach) + ' очк.') : null)),
     h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Каждую полночь счёт команды записывается в копилку; итог недели — копилка + счёт сегодняшнего дня.'),
     h('div',{class:'tbl'}, h('table',null,
       h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Итог'),...[1,2,3,4,5].map(d=>h('th',{title:'День '+d},'Д'+d)),h('th',null,'Узлов'),h('th',null,'Игроков'))),

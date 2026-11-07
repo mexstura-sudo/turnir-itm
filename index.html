@@ -89,13 +89,13 @@ if (!DEMO) {
     } } catch(e){} return false; };
   let A = null; const used = new Set(); const DONE = [];
   const state = () => {
-    if (A.done) return { done:true, name:A.name, game_code:'ИТМ-' + String(Math.abs([...A.name].reduce((x,c)=>x*31+c.charCodeAt(0)|0,7)) % 1000000).padStart(6,'0').replace(/^(\d{4})(\d{2})$/,'$1-$2'), score:A.tasks.reduce((s,t)=>s+(t.earned||0),0), correct:A.tasks.filter(t=>t.ok).length, total:10, time_ms:A.tasks.reduce((s,t)=>s+(t.spent||0),0), max_score:200 };
+    if (A.done) return { done:true, name:A.name, game_code:'ИТМ-' + String(Math.abs([...A.name].reduce((x,c)=>x*31+c.charCodeAt(0)|0,7)) % 100000000).padStart(8,'0').replace(/^(\d{4})(\d{4})$/,'$1-$2'), score:A.tasks.reduce((s,t)=>s+(t.earned||0),0), correct:A.tasks.filter(t=>t.ok).length, total:10, time_ms:A.tasks.reduce((s,t)=>s+(t.spent||0),0), max_score:200 };
     const t = A.tasks[A.idx];
     return { done:false, name:A.name, idx:A.idx, total:10, pool:t.pool, points:t.points, task:t.v.payload };
   };
   const advance = () => {};
   api = {
-    info: async () => ({ title:'Турнир по информатике', starts_at:new Date(Date.now()-864e5).toISOString(), ends_at:new Date(Date.now()+6*864e5).toISOString(), now:new Date().toISOString(), groups:GROUPS }),
+    info: async () => ({ title:'Турнир по информатике', starts_at:new Date(Date.now()-864e5).toISOString(), ends_at:new Date(Date.now()+6*864e5).toISOString(), now:new Date().toISOString(), groups:GROUPS, game:{ starts_at:'2026-11-09T08:00:00+08:00', ends_at:'2026-11-13T22:00:00+08:00' } }),
     publicResults: async () => ({ open:false }),
     top: async () => DONE.slice().sort((a,b)=>b.score-a.score),
     start: async (n, g) => {
@@ -164,10 +164,28 @@ async function boot(){
   showStart();
 }
 
+// --- карточка игры «Захват сети ИТМ» (сроки — из настроек игры в пульте) ---
+function gameCard(){
+  const g = INFO.game; if (!g) return null;
+  const now = INFO.now ? new Date(INFO.now).getTime() : Date.now(), st = new Date(g.starts_at), en = new Date(g.ends_at);
+  const irk = (d, o) => new Intl.DateTimeFormat('ru-RU', Object.assign({ timeZone:'Asia/Irkutsk' }, o)).format(d);
+  const dm = (d) => irk(d, { day:'numeric', month:'long' });
+  const range = irk(st, { month:'long' }) === irk(en, { month:'long' }) ? irk(st, { day:'numeric' }) + '–' + dm(en) : dm(st) + ' – ' + dm(en);
+  const when = now < st.getTime() ? 'Старт ' + dm(st) + ' в ' + irk(st, { hour:'numeric', minute:'2-digit' })
+    : now < en.getTime() ? 'Игра идёт' : 'Игра завершена';
+  return h('section',{class:'gamecard','aria-label':'Игра «Захват сети ИТМ»'},
+    h('div',{class:'lcd'}, 'Захват сети ИТМ'),
+    h('div',{class:'gc-body'},
+      h('p',{class:'gc-when'}, range + ' · ' + when),
+      h('p',{class:'gc-txt'}, 'Командная игра на карте техникума: каждая группа — команда, преподаватели — одна команда в центре сети. Код для входа выдаётся после олимпиады.'),
+      h('a',{class:'btn ghost',href:'game.html'}, 'Открыть игру')));
+}
+
 function showClosed(ended){
   clear();
   const box = h('div',{class:'sheet'});
   add(header(), box);
+  const gc = gameCard(); if (gc) add(gc);
   if (!ended) { box.append(h('h2',null,'Турнир ещё не начался'), h('p',null,'Старт: ', h('b',null, fmtDate(INFO.starts_at))), h('p',{class:'muted small'},'Финиш: ' + fmtDate(INFO.ends_at))); return; }
   box.append(h('h2',null,'Турнир завершён'), h('div',{class:'spin'}));
   api.publicResults().then(res => {
@@ -192,7 +210,8 @@ function showStart(tab){
   $app.classList.add('wide');
   const nav = document.getElementById('nav'), navIn = document.getElementById('nav-in');
   nav.hidden = false;
-  navIn.replaceChildren(...[['home','Главная'],['rules','Правила'],['rating','Рейтинг']].map(([k,l])=>h('button',{class:'key',type:'button','aria-pressed':String(HOME_TAB===k),onclick:()=>showStart(k)},l)));
+  navIn.replaceChildren(...[['home','Главная'],['rules','Правила'],['rating','Рейтинг']].map(([k,l])=>h('button',{class:'key',type:'button','aria-pressed':String(HOME_TAB===k),onclick:()=>showStart(k)},l)),
+    h('a',{class:'key key-game',href:'game.html'},'Игра'));
   const offset = Date.now() - new Date(INFO.now).getTime();
   const groups = INFO.groups || [];
 
@@ -273,7 +292,7 @@ function showStart(tab){
   let mainCol;
   if (HOME_TAB === 'rules') mainCol = h('div',{class:'col'}, rules);
   else if (HOME_TAB === 'rating') mainCol = h('div',{class:'col'}, printout('Рейтинг студентов', 20), h('p',{class:'small muted',style:'margin:0'},'Рейтинг обновляется, когда вы открываете вкладку. Победителей объявим после ' + fmtDate(INFO.ends_at) + '.'));
-  else mainCol = h('div',{class:'col'}, demoBanner(), hero, form, topics);
+  else mainCol = h('div',{class:'col'}, demoBanner(), hero, form, gameCard(), topics);
   add(h('div',{class:'home'}, mainCol, side));
 }
 
