@@ -34,7 +34,7 @@
   // неделя турнира: 5 дней, каждый день — событие, которое переворачивает поле
   const DAYS = [
     null,
-    { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡: вместо задачи — короткая мини-игра, проигрыш ничего не стоит. Занимайте территорию, пока она ничья.', captureFree: true, hot: 7 },
+    { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡: вместо задачи — короткая мини-игра, проигрыш ничего не стоит. Три домашних узла у каждой базы сегодня может занять только своя группа. Атака сегодня дешевле на 1 ⚡.', captureFree: true, homeOnly: true, attack: -1, hot: 7 },
     { t: 'Блэкаут в серверных', d: 'Ночью пропало питание: все узлы четырёх серверных снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', regions: SERVER_ROOMS, serverX: 2, hot: 9 },
     { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно: вместо задачи — мини-игра.', flip: 'doors', fortifyFree: true, hot: 8 },
     { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
@@ -228,7 +228,9 @@
 
   // ---------- правила ----------
   function connected(L, t) { const b = L.teams[t].base, seen = new Set([b]), q = [b]; while (q.length) { const u = q.shift(); L.adj[u].forEach((v) => { if (!seen.has(v) && L.nodes[v].owner === t) { seen.add(v); q.push(v); } }); } return seen; }
-  function reachable(L, t) { const c = connected(L, t), out = new Set(); c.forEach((u) => L.adj[u].forEach((v) => { const n = L.nodes[v]; if (n.owner !== t && n.kind !== 'base') out.add(v); })); return out; }
+  // ev.homeOnly (понедельник): свободный домашний узел чужой группы занять нельзя — его ждёт своя группа
+  const reserved = (n, t, ev) => !!(ev && ev.homeOnly && n.owner == null && n.home != null && n.home !== t);
+  function reachable(L, t, ev) { const c = connected(L, t), out = new Set(); c.forEach((u) => L.adj[u].forEach((v) => { const n = L.nodes[v]; if (n.owner !== t && n.kind !== 'base' && !reserved(n, t, ev)) out.add(v); })); return out; }
   function nodeValue(L, n, ev) {
     if (n.kind === 'base') return 0;
     let v = VALUE[n.kind];
@@ -266,7 +268,7 @@
   // ---------- боты ----------
   const botName = (L, t) => (L.teams[t].teach ? pick(TEACHERS) : pick(SURN));
   function botAction(G, L, t, who, silent) {
-    const reach = [...reachable(L, t)].map((i) => L.nodes[i]); if (!reach.length) return null;
+    const reach = [...reachable(L, t, evOf(G))].map((i) => L.nodes[i]); if (!reach.length) return null;
     const neutral = reach.filter((n) => n.owner == null), enemy = reach.filter((n) => n.owner != null && n.shield < 2);
     let n, action;
     const own = [...connected(L, t)].map((i) => L.nodes[i]).filter((x) => x.kind !== 'base' && x.shield < 3);
@@ -492,7 +494,7 @@
       h('div', { class: 'rule-grid' },
         h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждые 2 часа — в 0:00, 2:00 … 22:00 — +1 ⚡. Копится до 6 ⚡: заходите утром и вечером, чтобы заряд не простаивал.')),
         h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача (на домашнем узле чужой группы — ⭐⭐ по её специальности). В понедельник — 0 ⚡ и мини-игра вместо задачи.')),
-        h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
+        h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. В понедельник и пятницу — на 1 ⚡ дешевле. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
         h('div', null, h('b', null, '🏠 Домашние узлы'), h('p', null, 'Три соседа базы каждой группы. Задачи на них ⭐⭐ — по специальности этой группы: хозяевам легче их удержать.')),
         h('div', null, h('b', null, '🔗 Связь'), h('p', null, 'Узлы, отрезанные от базы, не приносят очков. Между цехами кабели идут только через двери.')),
@@ -826,7 +828,7 @@
 
     function draw() {
       layer.replaceChildren();
-      const reach = reachable(L, team), conns = L.teams.map((_, t) => connected(L, t));
+      const reach = reachable(L, team, evOf(G)), conns = L.teams.map((_, t) => connected(L, t));
       // моя территория — мягкое свечение
       const halo = sv('g', { opacity: 0.9 }); conns[team].forEach((u) => halo.append(sv('circle', { cx: L.nodes[u].x, cy: L.nodes[u].y, r: 40, fill: 'url(#haloG)' }))); layer.append(halo);
       // кабели
@@ -871,7 +873,7 @@
       const n = G.sel != null ? L.nodes[G.sel] : null;
       if (!n) { sheet.className = 'map-sheet hint'; fillEl(sheet, h('span', null, 'Нажмите на узел со значком '), h('i', { class: 'mini plus' }, '+'), h('span', null, ' или '), miniAtk()); return; }
       sheet.className = 'map-sheet open';
-      const reach = reachable(L, team), own = n.owner === team, conn = n.owner != null && connected(L, n.owner).has(n.id);
+      const reach = reachable(L, team, evOf(G)), own = n.owner === team, conn = n.owner != null && connected(L, n.owner).has(n.id);
       const ownerT = n.owner != null ? L.teams[n.owner] : null;
       const acts = [];
       const live = !G.over && G.day >= 1;
@@ -879,7 +881,7 @@
       if (live && own && n.kind !== 'base' && n.shield < 3 && conn) acts.push('fortify');
       const tier = (a) => ({ boss: '⭐⭐⭐', medium: '⭐⭐', easy: '⭐' }[taskKind(L, n, a, team).pool]);
       const homeP = n.home != null ? profOf(L, n.home) : null;
-      const homeTxt = homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '';
+      const homeTxt = (homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '') + (reserved(n, team, evOf(G)) ? ' Сегодня его может занять только эта группа.' : '');
       const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? 'Свободный узел рядом с вашей сетью.' : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
       const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
