@@ -303,14 +303,15 @@
   }
   // полночь: записать счёт дня в копилку
   function bankDay(L) { const ev = evOf(G); L.banked = L.banked || {}; L.yday = {}; L.teams.forEach((_, t) => { const v = score(L, t, ev); L.yday[t] = v; L.banked[t] = (L.banked[t] || 0) + v; }); }
-  // ход времени: каждые 2 часа (в чётные часы) +1 ⚡, соперники действуют; в полночь — новый день
+  // ход времени: каждый час +2 ⚡, соперники действуют; в полночь — новый день
   function advance(mins) {
     const L = G.L, me = G.me; let brief = null, gained = 0;
     for (let m = 0; m < mins && !G.over; m += 10) {
       const prev = G.clock; G.clock += 10;
-      if (Math.floor(G.clock / 120) > Math.floor(prev / 120)) {
-        if (me.energy < E_CAP) { me.energy++; gained++; }
+      if (Math.floor(G.clock / 60) > Math.floor(prev / 60)) {
+        if (me.energy < E_CAP) { const add = Math.min(2, E_CAP - me.energy); me.energy += add; gained += add; }
         const night = G.clock % 1440 < 7 * 60;
+        // соперники в демо ходят раз в час — с той же частотой, что приходит энергия
         L.teams.forEach((tm, t) => { if (rnd() < (night ? 0.06 : 0.3) * Math.sqrt(tm.members / 14) && !(t === me.team && rnd() < 0.5)) botAction(G, L, t, botName(L, t)); });
       }
       if (G.clock >= 1440) {
@@ -492,7 +493,7 @@
     return h('div', { class: 'sheet rules-sheet' },
       h('h2', null, 'Правила'),
       h('div', { class: 'rule-grid' },
-        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждые 2 часа — в 0:00, 2:00 … 22:00 — +1 ⚡. Копится до 6 ⚡: заходите утром и вечером, чтобы заряд не простаивал.')),
+        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждый час — в 0:00, 1:00 … 23:00 — +2 ⚡. Копится до 6 ⚡ (полный запас за 3 часа): заходите несколько раз в день, чтобы заряд не простаивал.')),
         h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача (на домашнем узле чужой группы — ⭐⭐ по её специальности). В понедельник — 0 ⚡ и мини-игра вместо задачи.')),
         h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. В понедельник и пятницу — на 1 ⚡ дешевле. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
@@ -549,7 +550,7 @@
     const L = G.L, me = G.me, myT = L.teams[me.team], ev = evOf(G);
     if (G.live) G.clock = irkMin(Date.now() + (G.skew || 0));
     const daySub = G.day ? `${dayDate(G.day).wd} ${dayDate(G.day).short} · ${hhmm(G.clock)}` : `старт ${atIrk(gStart()).short}`;
-    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : me.energy >= E_CAP ? 'запас полон' : '+1 в ' + hhmm((Math.floor(G.clock / 120) + 1) * 120);
+    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : me.energy >= E_CAP ? 'запас полон' : '+2 в ' + hhmm((Math.floor(G.clock / 60) + 1) * 60);
     return h('div', { class: 'hud' },
       h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: swatchStyle(myT) }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
       h('div', { class: 'hud-en', title: 'Энергия' }, h('small', null, 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
@@ -897,7 +898,7 @@
         acts.length ? h('div', { class: 'np-acts' }, ...acts.map((a) => { const c = cost(G, L, n, a); return h('button', { class: 'btn' + (a === 'fortify' ? ' ghost' : a === 'attack' ? ' btn-atk' : ''), type: 'button', disabled: me.energy < c, onclick: () => hack(L, n, a) },
           h('span', null, { capture: 'Захватить', attack: 'Атаковать', fortify: 'Укрепить щит' }[a]), h('small', null, c === 0 && a !== 'attack' ? ' 0 ⚡ · мини-игра' : ` ${c} ⚡ · задача ${tier(a)}`)); })) : null,
         acts.includes('attack') ? h('p', { class: 'small muted', style: 'margin:0' }, 'Начатую атаку отменить нельзя: ⚡ списывается сразу.') : null,
-        acts.length && acts.some((a) => me.energy < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, 'Не хватает энергии — новая приходит каждые 2 часа.') : null);
+        acts.length && acts.some((a) => me.energy < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, 'Не хватает энергии — каждый час приходит +2 ⚡.') : null);
     }
 
     function playAnim() {
@@ -1084,7 +1085,7 @@
         if (r.node) { const [id, owner, shield] = r.node; const x = L.nodes[id]; x.owner = owner; x.shield = shield; }
         if (r.energy != null) me.energy = r.energy;
         if (r.status === 'changed') return result('no', '↻', 'Узел изменился', `Пока вы решали, узел успел захватить или укрепить кто-то другой. ${action === 'attack' ? 'Энергия возвращена' : 'Энергия не потрачена'} — посмотрите на карту ещё раз.`);
-        if (r.status === 'no_energy') return result('no', '⚡', 'Не хватает энергии', 'Энергия не потрачена. Новая приходит каждые 2 часа.');
+        if (r.status === 'no_energy') return result('no', '⚡', 'Не хватает энергии', 'Энергия не потрачена. Каждый час приходит +2 ⚡.');
         if (r.status === 'error') return result('no', '!', 'Ответ не отправлен', r.msg + (action === 'attack' ? ' Атака уже оплачена — вернитесь к ней и отправьте ответ ещё раз.' : ''), action === 'attack');
         ok = r.status === 'ok'; c = r.cost != null ? r.cost : c;
         if (ok) { me.captures += action === 'fortify' ? 0 : 1; G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
