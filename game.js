@@ -230,7 +230,8 @@
   function connected(L, t) { const b = L.teams[t].base, seen = new Set([b]), q = [b]; while (q.length) { const u = q.shift(); L.adj[u].forEach((v) => { if (!seen.has(v) && L.nodes[v].owner === t) { seen.add(v); q.push(v); } }); } return seen; }
   // ev.homeOnly (понедельник): свободный домашний узел чужой группы занять нельзя — его ждёт своя группа
   const reserved = (n, t, ev) => !!(ev && ev.homeOnly && n.owner == null && n.home != null && n.home !== t);
-  function reachable(L, t, ev) { const c = connected(L, t), out = new Set(); c.forEach((u) => L.adj[u].forEach((v) => { const n = L.nodes[v]; if (n.owner !== t && n.kind !== 'base' && !reserved(n, t, ev)) out.add(v); })); return out; }
+  // если, кроме чужих забронированных узлов, ходить некуда — бронь на группу не действует (как g_home_stuck на сервере)
+  function reachable(L, t, ev) { const c = connected(L, t), out = new Set(), res = new Set(); c.forEach((u) => L.adj[u].forEach((v) => { const n = L.nodes[v]; if (n.owner !== t && n.kind !== 'base') (reserved(n, t, ev) ? res : out).add(v); })); return out.size ? out : res; }
   function nodeValue(L, n, ev) {
     if (n.kind === 'base') return 0;
     let v = VALUE[n.kind];
@@ -882,7 +883,7 @@
       if (live && own && n.kind !== 'base' && n.shield < 3 && conn) acts.push('fortify');
       const tier = (a) => ({ boss: '⭐⭐⭐', medium: '⭐⭐', easy: '⭐' }[taskKind(L, n, a, team).pool]);
       const homeP = n.home != null ? profOf(L, n.home) : null;
-      const homeTxt = (homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '') + (reserved(n, team, evOf(G)) ? ' Сегодня его может занять только эта группа.' : '');
+      const homeTxt = (homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '') + (reserved(n, team, evOf(G)) && !reach.has(n.id) ? ' Сегодня его может занять только эта группа.' : '');
       const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? 'Свободный узел рядом с вашей сетью.' : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
       const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
