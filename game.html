@@ -24,6 +24,14 @@
 .hud-en b{color:#ffcf3f;text-shadow:0 0 6px rgba(255,207,63,.6)}
 .hud-en,.hud-day{text-align:right}
 .swatch{display:inline-block;flex:none;width:16px;height:16px;border-radius:4px;border:2px solid #2b2a22;vertical-align:-3px}
+.notice{position:relative;display:flex;align-items:center;background:linear-gradient(#ffe45c,#ffc61a);color:#1d1b12;border:2px solid #1d1b12;border-radius:10px;padding:10px 44px 10px 24px;box-shadow:0 3px 0 #1d1b12,0 0 0 0 rgba(255,198,26,.7);overflow:hidden;animation:nt-glow 2.4s ease-in-out 3}
+.notice::before{content:'';position:absolute;left:0;top:0;bottom:0;width:12px;background:repeating-linear-gradient(-45deg,#1d1b12 0 6px,#ffc61a 6px 12px)}
+.notice p{margin:0;font:600 .98rem/1.35 var(--font-body)}
+.notice b{font:var(--display-w) 1.08rem var(--font-display);letter-spacing:var(--display-ls);text-transform:uppercase;color:#b3200e}
+.nt-x{position:absolute;top:4px;right:4px;width:36px;height:36px;border:0;background:none;color:#1d1b12;font:700 1.5rem/1 var(--font-body);cursor:pointer;border-radius:6px}
+.nt-x:hover{background:rgba(0,0,0,.08)}
+@keyframes nt-glow{50%{box-shadow:0 3px 0 #1d1b12,0 0 0 6px rgba(255,198,26,.45)}}
+@media (prefers-reduced-motion:reduce){.notice{animation:none}}
 .event{display:flex;flex-direction:column;gap:2px;background:var(--paper);border:2px solid var(--bevel-lo);border-left:8px solid var(--accent);border-radius:8px;padding:10px 12px}
 .ev-lbl{font:700 .72rem var(--font-body);letter-spacing:.14em;text-transform:uppercase;color:var(--accent-dk)}
 .event b{font:var(--display-w) 1.1rem var(--font-display);letter-spacing:var(--display-ls);text-transform:uppercase}

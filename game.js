@@ -572,13 +572,18 @@
     const event = G.day ? h('details', { class: 'event', open: G.evOpen != null ? G.evOpen : wideScr, ontoggle: (e) => { G.evOpen = e.target.open; } }, h('summary', null, h('span', { class: 'ev-lbl' }, `Событие дня · ${dayDate(G.day).wd}, ${dayDate(G.day).text}`), h('b', null, ev.t || '')), h('span', null, evText(ev, G.day)),
       hot && !G.over ? h('button', { type: 'button', class: 'ev-hot', onclick: () => { G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); } }, '🔥 Горячая точка: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ` — +10, ${hot.owner == null ? 'пока ничья' : 'держит ' + L.teams[hot.owner].name} ›`) : null)
       : h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, 'Скоро старт'), h('b', null, `Игра начнётся ${startText()}`), h('span', null, 'Вы уже в сети! Пока можно изучить карту, правила и разбор задач-боссов. Энергия начнёт копиться со старта.'));
+    // яркая плашка-объявление под табло (скрывается крестиком, запоминается в браузере)
+    const NOTICE_K = 'zs_notice_0800';
+    const notice = G.over || store.get(NOTICE_K) ? null : h('div', { class: 'notice', role: 'status' },
+      h('p', null, h('b', null, 'Важно: '), 'новый игровой день и события теперь начинаются в 08:00 утра, а не в полночь. Ночью можно спокойно спать: копилка запишется утром.'),
+      h('button', { type: 'button', class: 'nt-x', 'aria-label': 'Скрыть', onclick: (e) => { store.set(NOTICE_K, '1'); e.currentTarget.parentNode.remove(); } }, '×'));
     const bar = G.live ? null
       : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо · конец' : 'Демо'),
         h('span', { class: 'demo-codes' },
           h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
           h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : (G.clock < DAY_MIN ? 0 : 1440) - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
-    $app.append(...[buildHud(), event, bar, tabs, viewEl(L)].filter(Boolean));
+    $app.append(...[buildHud(), notice, event, bar, tabs, viewEl(L)].filter(Boolean));
     if ((G.day >= LAST_DAY || G.over) && G.view === 'map') $app.append(finalView(L));
     // демо: соперники ходят, пока вы смотрите
     if (!reduce && !G.live) G.timer = setInterval(() => { if (document.hidden || G.over) return; const t = Math.floor(Math.random() * L.teams.length); if (t === me.team && Math.random() < 0.5) return; const e = botAction(G, L, t, botName(L, t)); if (e) liveUpdate(L, e); }, 6500);
