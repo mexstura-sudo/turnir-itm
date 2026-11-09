@@ -40,7 +40,7 @@
     { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
     { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 7 },
   ];
-  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6; // демо: финал в 22:00 пятого дня; энергия копится до 6
+  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6, DAY_MIN = 8 * 60; // демо: финал в 22:00 пятого дня; энергия копится до 6; новый игровой день — в 08:00 по Иркутску
   // даты игры берутся с сервера (пульт → «Игра: сроки»); в демо — 9–13 ноября
   const DEF_START = Date.UTC(2026, 10, 9, 0, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
   const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -302,9 +302,9 @@
     L.hot = hotNode(L, day);
     return out;
   }
-  // полночь: записать счёт дня в копилку
+  // 08:00: записать счёт дня в копилку
   function bankDay(L) { const ev = evOf(G); L.banked = L.banked || {}; L.yday = {}; L.teams.forEach((_, t) => { const v = score(L, t, ev); L.yday[t] = v; L.banked[t] = (L.banked[t] || 0) + v; }); }
-  // ход времени: каждый час +2 ⚡, соперники действуют; в полночь — новый день
+  // ход времени: каждый час +2 ⚡, соперники действуют; в 08:00 — новый день
   function advance(mins) {
     const L = G.L, me = G.me; let brief = null, gained = 0;
     for (let m = 0; m < mins && !G.over; m += 10) {
@@ -315,8 +315,8 @@
         // соперники в демо ходят раз в час — с той же частотой, что приходит энергия
         L.teams.forEach((tm, t) => { if (rnd() < (night ? 0.06 : 0.3) * Math.sqrt(tm.members / 14) && !(t === me.team && rnd() < 0.5)) botAction(G, L, t, botName(L, t)); });
       }
-      if (G.clock >= 1440) {
-        G.clock -= 1440;
+      if (G.clock >= 1440) G.clock -= 1440;
+      if (prev < DAY_MIN && G.clock >= DAY_MIN) {
         if (G.day < LAST_DAY) { const before = score(L, me.team, evOf(G)); bankDay(L); G.day++; brief = dayFlip(L, G.day); brief.before = before; brief.after = score(L, me.team, evOf(G)); }
       }
       if (G.day === LAST_DAY && G.clock >= END_MIN) { G.clock = END_MIN; G.over = true; }
@@ -500,9 +500,9 @@
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
         h('div', null, h('b', null, '🏠 Домашние узлы'), h('p', null, 'Три соседа базы каждой группы. Задачи на них ⭐⭐ — по специальности этой группы: хозяевам легче их удержать.')),
         h('div', null, h('b', null, '🔗 Связь'), h('p', null, 'Узлы, отрезанные от базы, не приносят очков. Между цехами кабели идут только через двери.')),
-        h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5, больше половины цеха — +10. Каждую полночь счёт команды записывается в копилку: итог недели — сумма всех пяти дней.')),
+        h('div', null, h('b', null, '★ Очки'), h('p', null, 'Узел — 1, сервер ▣ — 3, ядро цеха ★ — 5, больше половины цеха — +10. Каждый день в 08:00 счёт команды записывается в копилку: итог недели — сумма всех пяти дней.')),
         h('div', null, h('b', null, '🔥 Горячая точка'), h('p', null, 'Каждый день горит один узел в одной из четырёх серверных: пока он ваш, он приносит +10 очков.')),
-        h('div', null, h('b', null, '📅 5 дней'), h('p', null, `С ${dayDate(1).text} по ${atIrk(gEnd()).text}. Каждую полночь — событие, которое переворачивает поле. Итоги — ${finalText(0)}.`))),
+        h('div', null, h('b', null, '📅 5 дней'), h('p', null, `С ${dayDate(1).text} по ${atIrk(gEnd()).text}. Каждое утро в 08:00 — событие, которое переворачивает поле. Итоги — ${finalText(0)}.`))),
       h('p', { class: 'small muted', style: 'margin:0' }, 'Ошибка в задаче сжигает потраченную энергию, проигрыш в мини-игре — нет: её можно пройти ещё раз. Студенты играют за свои группы, преподаватели — общей командой «Преподаватели» с базой в Учительской.'));
   }
   // теория для задач уровня БОСС
@@ -541,8 +541,8 @@
     return h('section', { class: 'sheet' }, h('h2', null, `Неделя игры · ${dayDate(1).text} – ${dayDate(LAST_DAY).text}`),
       h('ol', { class: 'cal' }, ...DAYS.slice(1).map((d, i) => { const n = i + 1, open = n <= G.day; return h('li', { class: n === G.day ? 'today' : n < G.day ? 'past' : 'locked' },
         h('span', { class: 'cal-d' }, h('b', null, dayDate(n).text.split(' ')[0]), h('small', null, dayDate(n).wd)),
-        h('div', null, h('b', null, open ? d.t : 'Событие засекречено'), h('span', null, open ? evText(d, n) : `Откроется ${dayDate(n).text} в 0:00 — и перевернёт поле.`))); })),
-      h('p', { class: 'small muted', style: 'margin:0' }, 'Каждую полночь начинается новый день: событие меняет поле, на карте загорается новая горячая точка 🔥.'));
+        h('div', null, h('b', null, open ? d.t : 'Событие засекречено'), h('span', null, open ? evText(d, n) : `Откроется ${dayDate(n).text} в 08:00 — и перевернёт поле.`))); })),
+      h('p', { class: 'small muted', style: 'margin:0' }, 'Каждое утро в 08:00 начинается новый день: событие меняет поле, на карте загорается новая горячая точка 🔥.'));
   }
   const kindLabel = (n) => ({ core: 'Ядро', server: 'Сервер', node: 'Узел', base: 'База' }[n.kind]);
   function toast(text, alarm) { const t = document.createElement('div'); t.className = 'toast' + (alarm ? ' alarm' : ''); t.textContent = text; document.body.append(t); setTimeout(() => t.remove(), 3400); }
@@ -576,7 +576,7 @@
       : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо · конец' : 'Демо'),
         h('span', { class: 'demo-codes' },
           h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
-          h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : 1440 - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
+          h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : (G.clock < DAY_MIN ? 0 : 1440) - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
     $app.append(...[buildHud(), event, bar, tabs, viewEl(L)].filter(Boolean));
     if ((G.day >= LAST_DAY || G.over) && G.view === 'map') $app.append(finalView(L));
@@ -1127,7 +1127,7 @@
         if (r.node) { const [id, owner, shield] = r.node; const x = L.nodes[id]; x.owner = owner; x.shield = shield; }
         if (r.energy != null) me.energy = r.energy;
         if (r.status === 'changed') return result('no', '↻', 'Узел изменился', 'Пока вы играли, узел успел захватить или укрепить кто-то другой. Посмотрите на карту ещё раз.');
-        if (r.status === 'expired') return result('no', '🌙', 'Начался новый день', 'Бесплатная мини-игра действовала до полуночи. Посмотрите, что изменилось на карте.');
+        if (r.status === 'expired') return result('no', '🌙', 'Начался новый день', 'Бесплатная мини-игра действовала до 08:00 — до начала нового дня. Посмотрите, что изменилось на карте.');
         if (r.status === 'error') return result('no', '!', 'Результат не отправлен', r.msg, true);
         ok = r.status === 'ok';
       } else if (win) { const prev = apply(L, n, me.team, action, me.name); L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); }
@@ -1152,13 +1152,13 @@
   }
 
   // ---------- рейтинг, журнал, итоги ----------
-  // итог недели = копилка (счёт, записанный в каждую полночь) + счёт сегодняшнего дня
+  // итог недели = копилка (счёт, записанный каждый день в 08:00) + счёт сегодняшнего дня
   function standings(L) { const ev = evOf(G); return L.teams.map((t, i) => { const live = score(L, i, ev), bank = (L.banked && L.banked[i]) || 0; return { t, i, live, bank, s: bank + live, nodes: connected(L, i).size - 1 }; }).sort((a, b) => b.s - a.s || b.live - a.live || b.nodes - a.nodes); }
   function rankView(L) {
     const rows = standings(L), max = Math.max(1, rows[0].s), bestGroup = rows.find((r) => !r.t.teach);
     const hk = G.live ? (G.top || []).map(([who, t, v]) => ({ who, t, v })) : Object.entries(L.hackers).map(([k, v]) => { const [who, t] = k.split('|'); return { who, t: +t, v }; }).filter((x) => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8);
     return h('div', { class: 'rank' },
-      h('section', { class: 'sheet' }, h('h2', null, 'Рейтинг команд'), h('p', { class: 'small muted', style: 'margin:0' }, G.day > 1 ? 'Итог недели: каждую полночь счёт команды записывается в копилку. Под названием: копилка + счёт сегодня.' : 'Итог недели: каждую полночь счёт команды записывается в копилку, к ней прибавляется счёт следующих дней.'),
+      h('section', { class: 'sheet' }, h('h2', null, 'Рейтинг команд'), h('p', { class: 'small muted', style: 'margin:0' }, G.day > 1 ? 'Итог недели: каждый день в 08:00 счёт команды записывается в копилку. Под названием: копилка + счёт сегодня.' : 'Итог недели: каждый день в 08:00 счёт команды записывается в копилку, к ней прибавляется счёт следующих дней.'),
         h('ol', { class: 'standings' }, ...rows.map((r, k) => h('li', { class: (r.i === G.me.team ? 'me' : '') + (r.t.teach ? ' teach' : '') },
           h('span', { class: 'st-n' }, String(k + 1)), h('span', { class: 'swatch', style: swatchStyle(r.t) }),
           h('span', { class: 'st-name' }, r.t.name, h('small', null, r.t.teach ? ` · ${r.t.members} преп.` : ` · ${r.t.members} уч.`), r === bestGroup && r.s > 0 ? h('small', { class: 'st-best' }, ' · лучшая группа') : null, G.day > 1 ? h('small', { class: 'st-day', title: 'копилка прошлых дней + счёт сегодня' }, `${r.bank} + ${r.live} сегодня`) : null),

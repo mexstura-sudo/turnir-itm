@@ -311,7 +311,7 @@ function gameForm(){
   const f = h('form',{class:'sheet'},
     h('h2',null,'Игра «Захват сети»: сроки'),
     h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + DATA.gstate.players),
-    h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Новый игровой день начинается в полночь, всего 5 дней с событиями. Чтобы проверить игру заранее — нажмите «Открыть сейчас», а перед настоящим стартом верните дату и сбросьте поле. После старта даты лучше не трогать: сдвиг меняет номер дня и события.'),
+    h('p',{class:'small muted',style:'margin:0'},'Время — иркутское. Новый игровой день (событие и запись в копилку) начинается в 08:00, всего 5 дней. Чтобы проверить игру заранее — нажмите «Открыть сейчас», а перед настоящим стартом верните дату и сбросьте поле. После старта даты лучше не трогать: сдвиг меняет номер дня и события.'),
     h('div',{class:'row'}, h('label',null,'Старт игры', a), h('label',null,'Финиш игры', b),
       h('button',{class:'btn ghost',type:'button',onclick:()=>{ a.value = now(); }},'Открыть сейчас'),
       h('button',{class:'btn',type:'submit'},'Сохранить')),
@@ -363,7 +363,7 @@ function gameView(){
     h('div',{class:'stats'},
       h('div',{class:'stat'}, h('span',null,'🏆 Лучшая группа студентов'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, bestGroup && tot(bestGroup) > 0 ? bestGroup.team : '—'), bestGroup && tot(bestGroup) > 0 ? h('span',null, tot(bestGroup) + ' очк. · ' + (st.indexOf(bestGroup) + 1) + '-е место в общем') : null),
       h('div',{class:'stat'}, h('span',null,'🎓 Преподаватели'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, teach ? (st.indexOf(teach) + 1) + '-е место' : '—'), teach ? h('span',null, tot(teach) + ' очк.') : null)),
-    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Каждую полночь счёт команды записывается в копилку; итог недели — копилка + счёт сегодняшнего дня.'),
+    h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Каждый день в 08:00 счёт команды записывается в копилку; итог недели — копилка + счёт сегодняшнего дня.'),
     h('div',{class:'tbl'}, h('table',null,
       h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Итог'),...[1,2,3,4,5].map(d=>h('th',{title:'День '+d},'Д'+d)),h('th',null,'Узлов'),h('th',null,'Игроков'))),
       h('tbody',null, ...st.map((r,i)=>{ const days = r.days || [], today = G.settings.today || 0, total = r.total ?? r.score ?? 0, now = r.today ?? r.score ?? 0;
