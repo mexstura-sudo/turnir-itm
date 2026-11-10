@@ -36,11 +36,14 @@
     null,
     { t: 'Запуск сети', d: 'Сеть открыта! Захват свободных узлов сегодня стоит 0 ⚡: вместо задачи — короткая мини-игра, проигрыш ничего не стоит. Три домашних узла у каждой базы сегодня может занять только своя группа. Атака сегодня дешевле на 1 ⚡.', captureFree: true, homeOnly: true, attack: -1, hot: 7 },
     { t: 'Блэкаут в серверных', d: 'Ночью пропало питание: все узлы четырёх серверных снова свободны, щиты сброшены. Серверы сегодня приносят ×2.', flip: 'blackout', regions: SERVER_ROOMS, serverX: 2, hot: 9 },
-    { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Проверьте связь с базой: отрезанные узлы не дают очков. Укрепление сегодня бесплатно: вместо задачи — мини-игра.', flip: 'doors', fortifyFree: true, hot: 8 },
-    { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
+    { t: 'Ремонт: двери переставили', d: 'Часть проёмов заложили, прорубили новые — кабели пошли иначе. Оборванные кабели демонтировали: узлы, отрезанные от своей базы, стали свободными. Отрезанные узлы не дают очков. Укрепление сегодня бесплатно: вместо задачи — мини-игра.', flip: 'doors', fortifyFree: true, hot: 8 },
+    { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2. Награда за голову: каждая успешная атака на узел лидера — сразу +2 очка в копилку.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
     { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 7 },
   ];
-  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6, DAY_MIN = 8 * 60; // демо: финал в 22:00 пятого дня; энергия копится до 6; новый игровой день — в 08:00 по Иркутску
+  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6, DAY_MIN = 8 * 60;
+  // энергия в начале часа: +2, в «счастливые часы» (12:00, 13:00, 14:00 по Иркутску) +3 — как g_energy_gain на сервере
+  const HAPPY_FROM = 12, HAPPY_TO = 15, gainAt = (hour) => (hour % 24 >= HAPPY_FROM && hour % 24 < HAPPY_TO ? 3 : 2);
+  const isHappy = (clock) => clock >= HAPPY_FROM * 60 && clock < HAPPY_TO * 60; // демо: финал в 22:00 пятого дня; энергия копится до 6; новый игровой день — в 08:00 по Иркутску
   // даты игры берутся с сервера (пульт → «Игра: сроки»); в демо — 9–13 ноября
   const DEF_START = Date.UTC(2026, 10, 9, 0, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
   const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -295,7 +298,13 @@
     const ev = DAYS[day], out = { day, hit: [], lines: [] };
     if (L.yday && G.me) out.lines.push(`В копилку за вчера: +${L.yday[G.me.team] || 0} очк. (всего ${(L.banked && L.banked[G.me.team]) || 0})`);
     if (ev.flip === 'blackout') { L.nodes.forEach((n) => { if (ev.regions.includes(n.region) && n.kind !== 'base' && (n.owner != null || n.shield)) { n.owner = null; n.shield = 0; out.hit.push(n.id); } }); out.lines.push(`Освобождено узлов в серверных: ${out.hit.length}`); }
-    if (ev.flip === 'doors') { const r = rewireDoors(L); out.hit = r.hit; out.lines.push(`Заложено проёмов: ${r.closed}, прорублено новых: ${r.opened}`); }
+    if (ev.flip === 'doors') {
+      const r = rewireDoors(L); out.hit = r.hit; out.lines.push(`Заложено проёмов: ${r.closed}, прорублено новых: ${r.opened}`);
+      // обрыв кабелей: отрезанные от своей базы узлы освобождаются (как в g_sync на сервере)
+      const conn = L.teams.map((_, t) => connected(L, t)); let cut = 0;
+      L.nodes.forEach((n) => { if (n.kind !== 'base' && n.owner != null && !conn[n.owner].has(n.id)) { n.owner = null; n.shield = 0; out.hit.push(n.id); cut++; } });
+      out.lines.push(`Оборванных узлов освобождено: ${cut}`);
+    }
     if (ev.flip === 'leaders') { L.leaders = standings(L).slice(0, 3).map((r) => r.i); L.nodes.forEach((n) => { if (L.leaders.includes(n.owner) && n.shield) { n.shield = 0; out.hit.push(n.id); } }); out.lines.push('Под прожектором: ' + L.leaders.map((t) => L.teams[t].name).join(', ')); }
     else L.leaders = [];
     if (ev.flip === 'shields') { L.nodes.forEach((n) => { if (n.shield) { n.shield = 0; out.hit.push(n.id); } }); out.lines.push(`Сброшено щитов на ${out.hit.length} узлах`); }
@@ -310,7 +319,7 @@
     for (let m = 0; m < mins && !G.over; m += 10) {
       const prev = G.clock; G.clock += 10;
       if (Math.floor(G.clock / 60) > Math.floor(prev / 60)) {
-        if (me.energy < E_CAP) { const add = Math.min(2, E_CAP - me.energy); me.energy += add; gained += add; }
+        if (me.energy < E_CAP) { const add = Math.min(gainAt(Math.floor(G.clock / 60)), E_CAP - me.energy); me.energy += add; gained += add; }
         const night = G.clock % 1440 < 7 * 60;
         // соперники в демо ходят раз в час — с той же частотой, что приходит энергия
         L.teams.forEach((tm, t) => { if (rnd() < (night ? 0.06 : 0.3) * Math.sqrt(tm.members / 14) && !(t === me.team && rnd() < 0.5)) botAction(G, L, t, botName(L, t)); });
@@ -494,7 +503,7 @@
     return h('div', { class: 'sheet rules-sheet' },
       h('h2', null, 'Правила'),
       h('div', { class: 'rule-grid' },
-        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждый час — в 0:00, 1:00 … 23:00 — +2 ⚡. Копится до 6 ⚡ (полный запас за 3 часа): заходите несколько раз в день, чтобы заряд не простаивал.')),
+        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждый час — в 0:00, 1:00 … 23:00 — +2 ⚡, а в счастливые часы — в 12:00, 13:00 и 14:00 — +3 ⚡. Копится до 6 ⚡ (полный запас за 3 часа): заходите несколько раз в день, чтобы заряд не простаивал.')),
         h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача (на домашнем узле чужой группы — ⭐⭐ по её специальности). В понедельник — 0 ⚡ и мини-игра вместо задачи.')),
         h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. В понедельник и пятницу — на 1 ⚡ дешевле. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
@@ -551,10 +560,11 @@
     const L = G.L, me = G.me, myT = L.teams[me.team], ev = evOf(G);
     if (G.live) G.clock = irkMin(Date.now() + (G.skew || 0));
     const daySub = G.day ? `${dayDate(G.day).wd} ${dayDate(G.day).short} · ${hhmm(G.clock)}` : `старт ${atIrk(gStart()).short}`;
-    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : me.energy >= E_CAP ? 'запас полон' : '+2 в ' + hhmm((Math.floor(G.clock / 60) + 1) * 60);
+    const nextH = Math.floor(G.clock / 60) + 1, happy = !G.over && G.day && isHappy(G.clock % 1440);
+    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : (me.energy >= E_CAP ? 'запас полон' : `+${gainAt(nextH)} в ${hhmm(nextH * 60)}`);
     return h('div', { class: 'hud' },
       h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: swatchStyle(myT) }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
-      h('div', { class: 'hud-en', title: 'Энергия' }, h('small', null, 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
+      h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
   function viewEl(L) {
@@ -1084,6 +1094,7 @@
       back ? h('div', { class: 'row2' }, toMapBtn, h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); hack(L, n, 'attack'); } }, 'Вернуться к атаке')) : toMapBtn));
     go.onclick = async () => {
       const conn = connected(L, me.team), from = action === 'fortify' ? null : L.adj[n.id].find((u) => conn.has(u));
+      const bounty = action === 'attack' && G.day === 4 && L.leaders.includes(n.owner);   // четверг: атака на лидера — +2 в копилку
       let ok;
       if (G.live) {
         go.disabled = true; if (no) no.disabled = true; go.textContent = 'Проверяем…';
@@ -1100,7 +1111,8 @@
         if (action !== 'attack') me.energy -= c;
         if (ok) { const prev = apply(L, n, me.team, action, me.name); me.captures += action === 'fortify' ? 0 : 1; L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
       }
-      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.`);
+      if (ok && bounty) { L.banked = L.banked || {}; L.banked[me.team] = (L.banked[me.team] || 0) + 2; }
+      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.` + (bounty ? ' Награда за голову лидера: +2 очка в копилку!' : ''));
       else result('no', '✗', 'Взлом не удался', `Ответ неверный, потрачено ${c} ⚡. Попробуйте другой узел или задачу.`);
     };
     document.body.append(m);
@@ -1179,7 +1191,7 @@
     const who = `${e.who} (${tn})`;
     if (e.action === 'fortify') return `${who} укрепил ${nodeTitle(L, n)}`;
     if (e.prev == null) return `${who} захватил ${nodeTitle(L, n)}`;
-    return `${who} отбил ${nodeTitle(L, n)} у ${teamName(L, e.prev)}`;
+    return `${who} отбил ${nodeTitle(L, n)} у ${teamName(L, e.prev)}` + (e.day === 4 && (L.leaders || []).includes(e.prev) ? ' · +2 за голову лидера' : '');
   }
   function logView(L) {
     return h('section', { class: 'sheet' }, h('h2', null, 'Журнал сети'),
