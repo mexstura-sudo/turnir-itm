@@ -488,7 +488,7 @@
       const r = applyLive(st, false);
       if (r.dayChanged) { G.sel = null; showGame(); maybeBrief(); return; }
       const hud = document.querySelector('.hud'); if (hud) hud.replaceWith(buildHud());
-      if (G.view === 'map' && mapRefs && mapRefs.L === G.L) { mapRefs.draw(); if (G.sel != null) mapRefs.drawSheet(); r.fresh.filter((e) => !e.me).slice(0, 4).forEach((e) => liveUpdate(G.L, e)); }
+      if (G.view === 'map' && mapRefs && mapRefs.L === G.L) { mapRefs.draw(); if (G.sel != null) mapRefs.drawSheet(); r.fresh.filter((e) => !e.me).slice(0, 4).forEach((e) => liveUpdate(G.L, e, true)); }
       else if (G.view === 'rank' || G.view === 'log') { const cur = document.querySelector('[data-view]'); if (cur) cur.replaceWith(viewEl(G.L)); }
     } catch (e) { /* тихо — следующий опрос через 20 с */ } finally { polling = false; }
   }
@@ -786,17 +786,28 @@
       <radialGradient id="haloG"><stop offset="0" stop-color="${myColor}" stop-opacity=".6"/><stop offset=".55" stop-color="${myColor}" stop-opacity=".3"/><stop offset="1" stop-color="${myColor}" stop-opacity="0"/></radialGradient>${FLOOR_DEFS}`;
     svg.append(defs);
     const bg = sv('g', { class: 'plan' }); svg.append(bg); drawPlan(L, bg);
-    const layer = sv('g', {}); svg.append(layer);
+    const layer = sv('g', { class: 'lyr' }); svg.append(layer);
     const fx = sv('g', { class: 'fx' }); svg.append(fx);
     let drag = null;
     const clampVB = (v) => { const m = v.w * 0.05; if (v.w >= X1 - X0) v.x = (X0 + X1 - v.w) / 2; else v.x = Math.max(X0 - m, Math.min(X1 - v.w + m, v.x)); const bot = G.sel != null ? v.h * 0.5 : m; if (v.h >= Y1 - Y0) v.y = Math.max(Y0 - m, Math.min(v.y, (Y0 + Y1 - v.h) / 2 + bot)); else v.y = Math.max(Y0 - m, Math.min(Y1 - v.h + bot, v.y)); return v; };
     const setVB = () => { const asp = (svg.clientHeight || 1) / (svg.clientWidth || 1); G.vb.h = G.vb.w * asp; if (!drag) clampVB(G.vb); svg.setAttribute('viewBox', `${G.vb.x} ${G.vb.y} ${G.vb.w} ${G.vb.h}`); };
+    // пока карту двигают, декоративные анимации стоят: иначе каждый кадр перерисовывается вся карта (~3 раза медленнее)
+    let movT = 0;
+    const moving = (on) => {
+      clearTimeout(movT);
+      if (on) { if (!svg.classList.contains('moving')) { svg.classList.add('moving'); try { svg.pauseAnimations(); } catch (e) { /* без SMIL */ } } }
+      else movT = setTimeout(() => { svg.classList.remove('moving'); try { svg.unpauseAnimations(); } catch (e) { /* без SMIL */ } if (drawPending) { drawPending = false; draw(); } }, 160);
+    };
+    // обновления с сервера во время движения откладываем до конца жеста: полная перерисовка посреди жеста даёт рывок
+    let drawPending = false;
+    const drawSoon = () => { if (svg.classList.contains('moving')) drawPending = true; else draw(); };
     let flyTok = 0; // новый перелёт отменяет предыдущий
     const flyTo = (x, y, w, ay) => {
       const from = { ...G.vb }, tw = w || G.vb.w, asp = (svg.clientHeight || 1) / (svg.clientWidth || 1), th = tw * asp;
       const to = clampVB({ x: x - tw / 2, y: y - th * (ay != null ? ay : G.sel != null ? 0.3 : 0.45), w: tw, h: th });
       if (reduce) { G.vb = { ...to, h: th }; setVB(); return; }
-      const tok = ++flyTok, t0 = performance.now(); const step = (t) => { if (tok !== flyTok) return; const k = Math.min(1, (t - t0) / 420), e = 1 - (1 - k) ** 3; G.vb.x = from.x + (to.x - from.x) * e; G.vb.y = from.y + (to.y - from.y) * e; G.vb.w = from.w + (to.w - from.w) * e; setVB(); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step);
+      moving(true);
+      const tok = ++flyTok, t0 = performance.now(); const step = (t) => { if (tok !== flyTok) return; const k = Math.min(1, (t - t0) / 420), e = 1 - (1 - k) ** 3; G.vb.x = from.x + (to.x - from.x) * e; G.vb.y = from.y + (to.y - from.y) * e; G.vb.w = from.w + (to.w - from.w) * e; setVB(); if (k < 1) requestAnimationFrame(step); else if (!drag && !pinch) moving(false); }; requestAnimationFrame(step);
     };
     const showAll = () => { const asp = (svg.clientHeight || 1) / (svg.clientWidth || 1); flyTo((X0 + X1) / 2, (Y0 + Y1) / 2 + 10, Math.max(X1 - X0, (Y1 - Y0 + 30) / asp) + 10, 0.5); };
     if (!G.vb) { const b = L.nodes[L.teams[team].base]; G.vb = { x: b.x - 200, y: b.y - 160, w: 400, h: 400 }; }
@@ -810,7 +821,7 @@
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Вся сеть', title: 'Вся сеть', onclick: () => { G.sel = null; draw(); drawSheet(); showAll(); } }, '⤢'),
       h('button', { type: 'button', class: 'mbtn', 'aria-label': 'Как читать карту', title: 'Как читать карту', onclick: showLegend }, '?'));
     const wrap = h('div', { class: 'mapwrap' }, svg, hudChip, ctl, sheet);
-    function zoom(f) { const cx = G.vb.x + G.vb.w / 2, cy = G.vb.y + G.vb.h / 2; G.vb.w = Math.max(170, Math.min((X1 - X0) * 1.25, G.vb.w * f)); G.vb.x = cx - G.vb.w / 2; setVB(); G.vb.y = cy - G.vb.h / 2; setVB(); }
+    function zoom(f) { moving(true); moving(false); const cx = G.vb.x + G.vb.w / 2, cy = G.vb.y + G.vb.h / 2; G.vb.w = Math.max(170, Math.min((X1 - X0) * 1.25, G.vb.w * f)); G.vb.x = cx - G.vb.w / 2; setVB(); G.vb.y = cy - G.vb.h / 2; setVB(); }
     // палец: один — двигать карту, два — масштаб (щипок); перерисовка не чаще кадра
     const ptrs = new Map(); let pinch = null, raf = 0;
     const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; setVB(); }); };
@@ -818,7 +829,7 @@
     svg.addEventListener('pointerdown', (e) => {
       ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { svg.setPointerCapture(e.pointerId); } catch (x) { /* не критично */ }
       if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, vx: G.vb.x, vy: G.vb.y, moved: false };
-      else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, w: G.vb.w, anchor: toSvg((a.x + b.x) / 2, (a.y + b.y) / 2) }; if (drag) drag.moved = true; }
+      else if (ptrs.size === 2) { moving(true); const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, w: G.vb.w, anchor: toSvg((a.x + b.x) / 2, (a.y + b.y) / 2) }; if (drag) drag.moved = true; }
     });
     svg.addEventListener('pointermove', (e) => {
       if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -830,12 +841,12 @@
       }
       if (!drag) return; const k = G.vb.w / svg.clientWidth, dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
-      if (drag.moved) { G.vb.x = drag.vx - dx * k; G.vb.y = drag.vy - dy * k; schedule(); }
+      if (drag.moved) { moving(true); G.vb.x = drag.vx - dx * k; G.vb.y = drag.vy - dy * k; schedule(); }
     });
     const release = (e) => {
       ptrs.delete(e.pointerId);
-      if (pinch) { if (ptrs.size < 2) { pinch = null; drag = null; setVB(); } return; }
-      const d = drag; drag = null; if (!d) return; if (d.moved || e.type === 'pointercancel') { setVB(); return; }
+      if (pinch) { if (ptrs.size < 2) { pinch = null; drag = null; setVB(); moving(false); } return; }
+      const d = drag; drag = null; if (!d) return; if (d.moved || e.type === 'pointercancel') { setVB(); moving(false); return; }
       const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse());
       let best = null, bd = (24 * G.vb.w / 400) ** 2 + 400; L.nodes.forEach((n) => { const dd = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (dd < bd) { bd = dd; best = n; } });
       G.sel = best ? best.id : null; draw(); drawSheet(); if (best) flyTo(best.x, best.y, G.vb.w);
@@ -980,7 +991,7 @@
       }, dur);
     }
     const flash = (ids) => (ids || []).slice(0, 18).forEach((id, i) => ripple(L.nodes[id], '#ec6a1c', i * 110));
-    mapRefs = { L, draw, drawSheet, svg, ripple, team, flash, dayFx, flyTo };
+    mapRefs = { L, draw: drawSoon, drawSheet, svg, ripple, team, flash, dayFx, flyTo };
     requestAnimationFrame(() => { setVB(); playAnim(); if (G.focus != null) { const f = L.nodes[G.focus]; G.focus = null; flyTo(f.x, f.y, Math.min(G.vb.w, 380)); } });
     window.addEventListener('resize', setVB, { once: true });
     draw(); drawSheet();
@@ -1040,9 +1051,9 @@
     m.addEventListener('click', (e) => { if (e.target === m) m.remove(); });
     document.body.append(m);
   }
-  function liveUpdate(L, e) {
+  function liveUpdate(L, e, drawn) {   // drawn: карта уже перерисована один раз на всю пачку ходов
     const hitMe = e.prev === G.me.team && e.action !== 'fortify';
-    if (G.view === 'map' && mapRefs && mapRefs.L === L) { mapRefs.draw(); if (G.sel === e.node) mapRefs.drawSheet(); mapRefs.ripple(L.nodes[e.node], hitMe ? '#c2381f' : L.teams[e.t].color); }
+    if (G.view === 'map' && mapRefs && mapRefs.L === L) { if (!drawn) mapRefs.draw(); if (G.sel === e.node) mapRefs.drawSheet(); mapRefs.ripple(L.nodes[e.node], hitMe ? '#c2381f' : L.teams[e.t].color); }
     if (G.live && !hitMe) return; // в живой игре всплывают только атаки на вашу команду
     const t = document.createElement('div'); t.className = 'toast' + (hitMe ? ' alarm' : ''); t.textContent = (hitMe ? '⚠ ' : '') + logText(L, e); document.body.append(t); setTimeout(() => t.remove(), 3400);
   }
