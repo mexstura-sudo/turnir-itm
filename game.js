@@ -460,8 +460,8 @@
     const prevDay = G.day; G.day = st.day; G.over = now >= G.endsAt; G.clock = irkMin(now);
     Object.assign(me, { energy: st.me.energy, captures: st.me.captures, team: st.me.team, name: st.me.name });
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
-    st.nodes.forEach(([id, owner, shield]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; } });
-    const surgeWas = !!(G.surge && G.surge.done); G.surge = st.surge || null;
+    st.nodes.forEach(([id, owner, shield, inf]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; n.infected = !!inf && owner == null; } });
+    const evSig = (x, v) => `${!!(x && x.done)}|${!!(v && v.started)}|${!!(v && v.ended)}`, surgeWas = evSig(G.surge, G.virus); G.surge = st.surge || null; G.virus = st.virus || null;
     L.hot = st.hot; L.leaders = st.leaders || []; G.crew = st.crew || null; G.eCap = st.e_cap || E_CAP;
     L.banked = {}; Object.entries(st.banked || {}).forEach(([t, v]) => { L.banked[t] = +v; }); L.yday = {}; Object.entries(st.yday || {}).forEach(([t, v]) => { L.yday[t] = +v; });
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
@@ -470,7 +470,7 @@
     (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (G.seen.has(id)) return; G.seen.add(id); G.logId = Math.max(G.logId, id); const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
     L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     G.ver = st.ver;
-    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== !!(G.surge && G.surge.done), fresh: first ? [] : fresh };
+    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== evSig(G.surge, G.virus), fresh: first ? [] : fresh };
   }
   let polling = false, visHooked = false;
   function startPoll() {
@@ -575,11 +575,12 @@
   // большой таймер над полем; что случится — сервер сообщает только после нуля
   function surgeEl() {
     clearInterval(G.surgeTm);
-    const sg = G.live ? G.surge : null; if (!sg || G.over) return null;
+    const vr = G.live && G.virus && !G.virus.ended ? G.virus : null;
+    const sg = vr ? { at: vr.at, done: vr.started, title: vr.title, text: vr.text, cls: 'virus' } : G.live ? G.surge : null; if (!sg || G.over) return null;
     const at = Date.parse(sg.at), p2 = (x) => String(x).padStart(2, '0');
     if (sg.done) {
       const K = 'zs_surge_' + at; if (store.get(K)) return null;
-      return h('div', { class: 'surge-alert', role: 'alert' }, h('b', null, '⚡ ' + (sg.title || 'Событие')), h('p', null, sg.text || ''),
+      return h('div', { class: 'surge-alert' + (sg.cls ? ' ' + sg.cls : ''), role: 'alert' }, h('b', null, (sg.cls ? '☣ ' : '⚡ ') + (sg.title || 'Событие')), h('p', null, sg.text || ''),
         h('button', { type: 'button', class: 'nt-x', 'aria-label': 'Скрыть', onclick: (e) => { store.set(K, '1'); e.currentTarget.parentNode.remove(); } }, '×'));
     }
     const lcd = h('div', { class: 'lcd' }); let asked = 0;
@@ -905,6 +906,7 @@
         if (L.hot === n.id) g.append(sv('circle', { r: 24, fill: 'rgba(255,207,63,.25)', stroke: '#e0a100', 'stroke-width': 2.5, class: 'hotring' }));
         if (canPlus || canAtk) g.append(sv('circle', { r: 18, fill: 'none', stroke: canPlus ? C_PLUS : C_ATK, 'stroke-width': 2.4, 'stroke-dasharray': '4 3', class: 'reach' }));
         g.append(nodeShape(n.kind, owned ? L.teams[n.owner] : null, { mine: isMine && !cut, cut, teach: owned && L.teams[n.owner].teach }));
+        if (!owned && n.infected) { g.append(sv('circle', { r: 11, fill: 'rgba(138,43,226,.45)', stroke: '#8a2be2', 'stroke-width': 2.2 })); const vt = sv('text', { y: 4.5, 'text-anchor': 'middle', class: 'vir-ico' }); vt.textContent = '☣'; g.append(vt); }
         if (n.kind === 'base') {
           const name = L.teams[n.owner].name, lbl = isMine ? 'ВЫ · ' + name : name, wpx = lbl.length * 6.4 + 12;
           g.append(sv('rect', { x: -wpx / 2, y: 17, width: wpx, height: 15, rx: 7.5, fill: isMine ? '#ec6a1c' : L.teams[n.owner].teach ? '#7a5d05' : INK }));
@@ -937,7 +939,7 @@
       const tier = (a) => ({ boss: '⭐⭐⭐', medium: '⭐⭐', easy: '⭐' }[taskKind(L, n, a, team).pool]);
       const homeP = n.home != null ? profOf(L, n.home) : null;
       const homeTxt = (homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '') + (reserved(n, team, evOf(G)) && !reach.has(n.id) ? ' Сегодня его может занять только эта группа.' : '');
-      const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? 'Свободный узел рядом с вашей сетью.' : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
+      const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? (n.infected ? 'Узел заражён вирусом ☣ — займите его, чтобы вылечить.' : 'Свободный узел рядом с вашей сетью.') : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
       const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
       fillEl(sheet,
@@ -1080,7 +1082,7 @@
   }
   function liveUpdate(L, e, drawn) {   // drawn: карта уже перерисована один раз на всю пачку ходов
     const hitMe = e.prev === G.me.team && e.action !== 'fortify';
-    if (G.view === 'map' && mapRefs && mapRefs.L === L) { if (!drawn) mapRefs.draw(); if (G.sel === e.node) mapRefs.drawSheet(); mapRefs.ripple(L.nodes[e.node], hitMe ? '#c2381f' : L.teams[e.t].color); }
+    if (G.view === 'map' && mapRefs && mapRefs.L === L) { if (!drawn) mapRefs.draw(); if (G.sel === e.node) mapRefs.drawSheet(); mapRefs.ripple(L.nodes[e.node], e.action === 'virus' || e.action === 'vshield' ? '#8a2be2' : hitMe ? '#c2381f' : L.teams[e.t].color); }
     if (G.live && !hitMe) return; // в живой игре всплывают только атаки на вашу команду
     const t = document.createElement('div'); t.className = 'toast' + (hitMe ? ' alarm' : ''); t.textContent = (hitMe ? '⚠ ' : '') + logText(L, e); document.body.append(t); setTimeout(() => t.remove(), 3400);
   }
@@ -1227,6 +1229,8 @@
   function logText(L, e) {
     const n = L.nodes[e.node], tn = teamName(L, e.t);
     const who = `${e.who} (${tn})`;
+    if (e.action === 'virus') return `☣ Вирус заразил ${nodeTitle(L, n)} у ${tn}`;
+    if (e.action === 'vshield') return `🛡 Щит ${tn} отразил вирус на ${nodeTitle(L, n)}`;
     if (e.action === 'fortify') return `${who} укрепил ${nodeTitle(L, n)}`;
     if (e.prev == null) return `${who} захватил ${nodeTitle(L, n)}`;
     return `${who} отбил ${nodeTitle(L, n)} у ${teamName(L, e.prev)}` + (e.day === 4 && (L.leaders || []).includes(e.prev) ? ' · +2 за голову лидера' : '');
