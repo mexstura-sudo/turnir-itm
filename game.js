@@ -257,7 +257,7 @@
   function cost(G, L, n, action) {
     const ev = evOf(G); let c = action === 'capture' ? 1 : action === 'attack' ? 2 + n.shield : 1;
     if (action === 'attack') { if (ev.attack) c += ev.attack; if (ev.leaderAttack && L.leaders.includes(n.owner)) c += ev.leaderAttack; }
-    if (action === 'fortify' && ev.fortifyFree) c = 0;
+    if (action === 'fortify' && ev.fortifyFree && !(G.live && G.surge && G.surge.done && n.shield >= 2)) c = 0;
     if (action === 'capture' && ev.captureFree) c = 0;
     return Math.max(0, c);
   }
@@ -461,6 +461,7 @@
     Object.assign(me, { energy: st.me.energy, captures: st.me.captures, team: st.me.team, name: st.me.name });
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
     st.nodes.forEach(([id, owner, shield]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; } });
+    const surgeWas = !!(G.surge && G.surge.done); G.surge = st.surge || null;
     L.hot = st.hot; L.leaders = st.leaders || []; G.crew = st.crew || null; G.eCap = st.e_cap || E_CAP;
     L.banked = {}; Object.entries(st.banked || {}).forEach(([t, v]) => { L.banked[t] = +v; }); L.yday = {}; Object.entries(st.yday || {}).forEach(([t, v]) => { L.yday[t] = +v; });
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
@@ -469,7 +470,7 @@
     (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (G.seen.has(id)) return; G.seen.add(id); G.logId = Math.max(G.logId, id); const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
     L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     G.ver = st.ver;
-    return { dayChanged: prevDay != null && prevDay !== G.day, fresh: first ? [] : fresh };
+    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== !!(G.surge && G.surge.done), fresh: first ? [] : fresh };
   }
   let polling = false, visHooked = false;
   function startPoll() {
@@ -487,6 +488,7 @@
       if (st && st.error) { if (st.error !== 'TOO_MANY') location.reload(); return; } // поле перезалили или код пропал — войти заново
       const r = applyLive(st, false);
       if (r.dayChanged) { G.sel = null; showGame(); maybeBrief(); return; }
+      if (r.surgeChanged) { showGame(); return; }
       const hud = document.querySelector('.hud'); if (hud) hud.replaceWith(buildHud());
       if (G.view === 'map' && mapRefs && mapRefs.L === G.L) { mapRefs.draw(); if (G.sel != null) mapRefs.drawSheet(); r.fresh.filter((e) => !e.me).slice(0, 4).forEach((e) => liveUpdate(G.L, e, true)); }
       else if (G.view === 'rank' || G.view === 'log') { const cur = document.querySelector('[data-view]'); if (cur) cur.replaceWith(viewEl(G.L)); }
@@ -570,6 +572,28 @@
       h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub), crewLine),
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
+  // большой таймер над полем; что случится — сервер сообщает только после нуля
+  function surgeEl() {
+    clearInterval(G.surgeTm);
+    const sg = G.live ? G.surge : null; if (!sg || G.over) return null;
+    const at = Date.parse(sg.at), p2 = (x) => String(x).padStart(2, '0');
+    if (sg.done) {
+      const K = 'zs_surge_' + at; if (store.get(K)) return null;
+      return h('div', { class: 'surge-alert', role: 'alert' }, h('b', null, '⚡ ' + (sg.title || 'Событие')), h('p', null, sg.text || ''),
+        h('button', { type: 'button', class: 'nt-x', 'aria-label': 'Скрыть', onclick: (e) => { store.set(K, '1'); e.currentTarget.parentNode.remove(); } }, '×'));
+    }
+    const lcd = h('div', { class: 'lcd' }); let asked = 0;
+    const tick = () => {
+      if (!lcd.isConnected && asked) { clearInterval(G.surgeTm); return; }
+      const left = Math.max(0, Math.floor((at - (Date.now() + (G.skew || 0))) / 1000));
+      lcd.replaceChildren(h('small', null, left ? '⚠ До события' : 'Событие наступает…'), ART.sevenSeg([[p2(Math.floor(left / 3600)), 'час'], [p2(Math.floor(left % 3600 / 60)), 'мин'], [p2(left % 60), 'сек']]),
+        h('small', { class: 'surge-q' }, 'Что произойдёт — узнаете, когда таймер дойдёт до нуля'));
+      asked = 1;
+      if (!left && Date.now() - (G.surgeAsk || 0) > 4000) { G.surgeAsk = Date.now(); pollLive(); }
+    };
+    tick(); G.surgeTm = setInterval(tick, 1000);
+    return h('div', { class: 'countdown screws surge' }, lcd);
+  }
   function viewEl(L) {
     const el = G.view === 'map' ? mapView(L) : G.view === 'rank' ? rankView(L) : G.view === 'log' ? logView(L) : h('div', { class: 'mapcol' },
       G.live ? h('section', { class: 'sheet mycode' }, h('div', null, h('span', { class: 'eyebrow' }, 'Ваш код'), h('div', null, h('b', null, G.code))), h('button', { class: 'btn ghost', type: 'button', onclick: () => { store.del('zs_code'); showLogin(); } }, 'Выйти')) : null,
@@ -596,7 +620,7 @@
           h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
           h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : (G.clock < DAY_MIN ? 0 : 1440) - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
-    $app.append(...[buildHud(), notice, event, bar, tabs, viewEl(L)].filter(Boolean));
+    $app.append(...[buildHud(), notice, event, bar, tabs, surgeEl(), viewEl(L)].filter(Boolean));
     if ((G.day >= LAST_DAY || G.over) && G.view === 'map') $app.append(finalView(L));
     // демо: соперники ходят, пока вы смотрите
     if (!reduce && !G.live) G.timer = setInterval(() => { if (document.hidden || G.over) return; const t = Math.floor(Math.random() * L.teams.length); if (t === me.team && Math.random() < 0.5) return; const e = botAction(G, L, t, botName(L, t)); if (e) liveUpdate(L, e); }, 6500);

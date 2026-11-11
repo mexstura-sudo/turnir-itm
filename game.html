@@ -11,7 +11,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#2f5a44">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Rubik:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261111a">
+<link rel="stylesheet" href="style.css?v=20261111b">
 <style>
 /* Layout: игровой пульт — сверху табло игрока, под ним карта-граф сети техникума и панель выбранного узла */
 .wrap.game{max-width:760px}
@@ -23,6 +23,14 @@
 .hud-who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hud-en b{color:#ffcf3f;text-shadow:0 0 6px rgba(255,207,63,.6)}
 .hud-en,.hud-day{text-align:right}
+.surge{margin:0 0 10px}
+.surge .lcd{font-size:clamp(1.6rem,7vw,2.4rem);padding:8px 10px;display:flex;flex-direction:column;gap:6px;align-items:center}
+.surge .sevenseg{max-width:420px}
+.surge .lcd small{font:700 .8rem var(--font-body);letter-spacing:.12em;color:var(--lcd)}
+.surge .lcd .surge-q{font:500 .72rem var(--font-body);letter-spacing:.04em;text-transform:none;opacity:.8}
+.surge-alert{position:relative;margin:0 0 10px;padding:12px 44px 12px 16px;border-radius:10px;border:2px solid #1d1b12;background:linear-gradient(#ff8a5c,#ff5a2a);color:#1d1b12;box-shadow:0 3px 0 #1d1b12;animation:nt-glow 2.4s ease-in-out 3}
+.surge-alert b{display:block;font:var(--display-w) 1.25rem var(--font-display);letter-spacing:var(--display-ls);text-transform:uppercase;margin-bottom:4px}
+.surge-alert p{margin:0;font:600 .95rem/1.4 var(--font-body)}
 .hud-crew{display:block;font-size:.68rem;opacity:.75;white-space:nowrap}
 .hud-crew.on{color:#86f29a;opacity:1;font-weight:700}
 .hud-en.happy{position:relative;border-radius:10px;padding:2px 8px;margin:-2px -8px;background:rgba(255,198,26,.14);box-shadow:0 0 0 2px #ffc61a,0 0 18px rgba(255,198,26,.55);animation:happy 1.6s ease-in-out infinite}
@@ -265,13 +273,13 @@ details.event>summary::after{transition:none}}
 <footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Неделя турнира · 2026</span></div></footer>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="art.js?v=20261111a"></script>
-<script src="mechanics.js?v=20261111a"></script>
-<script src="demo-tasks.js?v=20261111a"></script>
-<script src="arcade.js?v=20261111a"></script>
+<script src="art.js?v=20261111b"></script>
+<script src="mechanics.js?v=20261111b"></script>
+<script src="demo-tasks.js?v=20261111b"></script>
+<script src="arcade.js?v=20261111b"></script>
 <script>
 document.querySelectorAll('[data-art]').forEach(n => { const seed = +n.dataset.seed || 1; n.replaceWith(n.dataset.art === 'card' ? ART.punchCard(seed) : ART.gears()); });
 </script>
-<script src="game.js?v=20261111a"></script>
+<script src="game.js?v=20261111b"></script>
 </body>
 </html>
