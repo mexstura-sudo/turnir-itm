@@ -11,7 +11,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#2f5a44">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Rubik:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261110b">
+<link rel="stylesheet" href="style.css?v=20261111a">
 <style>
 /* Layout: игровой пульт — сверху табло игрока, под ним карта-граф сети техникума и панель выбранного узла */
 .wrap.game{max-width:760px}
@@ -23,6 +23,8 @@
 .hud-who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hud-en b{color:#ffcf3f;text-shadow:0 0 6px rgba(255,207,63,.6)}
 .hud-en,.hud-day{text-align:right}
+.hud-crew{display:block;font-size:.68rem;opacity:.75;white-space:nowrap}
+.hud-crew.on{color:#86f29a;opacity:1;font-weight:700}
 .hud-en.happy{position:relative;border-radius:10px;padding:2px 8px;margin:-2px -8px;background:rgba(255,198,26,.14);box-shadow:0 0 0 2px #ffc61a,0 0 18px rgba(255,198,26,.55);animation:happy 1.6s ease-in-out infinite}
 .hud-en.happy>small:first-child{color:#ffd23f!important}
 .hud-en.happy b{color:#ffe45c;text-shadow:0 0 10px rgba(255,228,92,.9)}
@@ -263,13 +265,13 @@ details.event>summary::after{transition:none}}
 <footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Неделя турнира · 2026</span></div></footer>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="art.js?v=20261110b"></script>
-<script src="mechanics.js?v=20261110b"></script>
-<script src="demo-tasks.js?v=20261110b"></script>
-<script src="arcade.js?v=20261110b"></script>
+<script src="art.js?v=20261111a"></script>
+<script src="mechanics.js?v=20261111a"></script>
+<script src="demo-tasks.js?v=20261111a"></script>
+<script src="arcade.js?v=20261111a"></script>
 <script>
 document.querySelectorAll('[data-art]').forEach(n => { const seed = +n.dataset.seed || 1; n.replaceWith(n.dataset.art === 'card' ? ART.punchCard(seed) : ART.gears()); });
 </script>
-<script src="game.js?v=20261110b"></script>
+<script src="game.js?v=20261111a"></script>
 </body>
 </html>

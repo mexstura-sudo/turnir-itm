@@ -40,10 +40,10 @@
     { t: 'Концерт: прожектор на лидеров', d: 'У трёх лидеров рейтинга сброшены щиты, атака на их узлы дешевле на 1 ⚡. В Актовом зале концерт — его узлы приносят ×2. Награда за голову: каждая успешная атака на узел лидера — сразу +2 очка в копилку.', flip: 'leaders', region: 3, regionX: 2, leaderAttack: -1, hot: 2 },
     { t: 'Финальный штурм', d: 'Все щиты в сети сброшены. Атака везде дешевле на 1 ⚡, ядра цехов приносят ×2. Итоги — {final}.', flip: 'shields', attack: -1, coreX: 2, hot: 7 },
   ];
-  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 6, DAY_MIN = 8 * 60;
+  const LAST_DAY = 5, END_MIN = 22 * 60, E_CAP = 10, DAY_MIN = 8 * 60;
   // энергия в начале часа: +2, в «счастливые часы» (12:00, 13:00, 14:00 по Иркутску) +3 — как g_energy_gain на сервере
   const HAPPY_FROM = 12, HAPPY_TO = 15, gainAt = (hour) => (hour % 24 >= HAPPY_FROM && hour % 24 < HAPPY_TO ? 3 : 2);
-  const isHappy = (clock) => clock >= HAPPY_FROM * 60 && clock < HAPPY_TO * 60; // демо: финал в 22:00 пятого дня; энергия копится до 6; новый игровой день — в 08:00 по Иркутску
+  const isHappy = (clock) => clock >= HAPPY_FROM * 60 && clock < HAPPY_TO * 60; // демо: финал в 22:00 пятого дня; энергия копится до 10; новый игровой день — в 08:00 по Иркутску
   // даты игры берутся с сервера (пульт → «Игра: сроки»); в демо — 9–13 ноября
   const DEF_START = Date.UTC(2026, 10, 9, 0, 0), DEF_END = Date.UTC(2026, 10, 13, 14, 0);
   const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -461,7 +461,7 @@
     Object.assign(me, { energy: st.me.energy, captures: st.me.captures, team: st.me.team, name: st.me.name });
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
     st.nodes.forEach(([id, owner, shield]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; } });
-    L.hot = st.hot; L.leaders = st.leaders || [];
+    L.hot = st.hot; L.leaders = st.leaders || []; G.crew = st.crew || null; G.eCap = st.e_cap || E_CAP;
     L.banked = {}; Object.entries(st.banked || {}).forEach(([t, v]) => { L.banked[t] = +v; }); L.yday = {}; Object.entries(st.yday || {}).forEach(([t, v]) => { L.yday[t] = +v; });
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
     G.top = st.top || [];
@@ -503,7 +503,7 @@
     return h('div', { class: 'sheet rules-sheet' },
       h('h2', null, 'Правила'),
       h('div', { class: 'rule-grid' },
-        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждый час — в 0:00, 1:00 … 23:00 — +2 ⚡, а в счастливые часы — в 12:00, 13:00 и 14:00 — +3 ⚡. Копится до 6 ⚡ (полный запас за 3 часа): заходите несколько раз в день, чтобы заряд не простаивал.')),
+        h('div', null, h('b', null, '⚡ Энергия'), h('p', null, 'Старт — от баллов олимпиады: 5 + балл ÷ 20 (до 15). Каждый час — в 0:00, 1:00 … 23:00 — +2 ⚡, а в счастливые часы — в 12:00, 13:00 и 14:00 — +3 ⚡. Командный заряд: если за час в игру зашли 25% вашей группы — в начале следующего часа всем +1 ⚡, если 50% — +2 ⚡. Копится до 10 ⚡: заходите несколько раз в день и зовите группу.')),
         h('div', null, h('b', null, '◯ Захват'), h('p', null, 'Свободный узел рядом с территорией: 1 ⚡ + лёгкая задача (на домашнем узле чужой группы — ⭐⭐ по её специальности). В понедельник — 0 ⚡ и мини-игра вместо задачи.')),
         h('div', null, h('b', null, '⚔ Атака'), h('p', null, 'Узел соперника: 2 ⚡ + 1 ⚡ за каждый щит. В понедельник и пятницу — на 1 ⚡ дешевле. Задача по вашей специальности (на домашнем узле — по специальности хозяев), при 2+ щитах — «босс». Энергия списывается сразу: начатую атаку отменить нельзя. Если узел изменится, пока вы решаете, энергия вернётся.')),
         h('div', null, h('b', null, '◎ Щиты'), h('p', null, 'Укрепить свой узел: 1 ⚡ + задача, до 3 щитов. Захват сбрасывает щиты. В среду — 0 ⚡ и мини-игра.')),
@@ -561,10 +561,13 @@
     if (G.live) G.clock = irkMin(Date.now() + (G.skew || 0));
     const daySub = G.day ? `${dayDate(G.day).wd} ${dayDate(G.day).short} · ${hhmm(G.clock)}` : `старт ${atIrk(gStart()).short}`;
     const nextH = Math.floor(G.clock / 60) + 1, happy = !G.over && G.day && isHappy(G.clock % 1440);
-    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : (me.energy >= E_CAP ? 'запас полон' : `+${gainAt(nextH)} в ${hhmm(nextH * 60)}`);
+    // командный заряд: доля группы, зашедшей в игру в этот час, добавляет +1/+2 ⚡ к следующей порции (только в живой игре)
+    const crew = G.live && G.crew && G.day && !G.over ? G.crew : null, cap = G.eCap || E_CAP;
+    const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : (me.energy >= cap ? 'запас полон' : `+${gainAt(nextH) + (crew ? crew.bonus : 0)} в ${hhmm(nextH * 60)}`);
+    const crewLine = crew ? h('small', { class: 'hud-crew' + (crew.bonus ? ' on' : ''), title: 'Командный заряд: если за час в игру зашли 25% группы — +1 ⚡ всем, 50% — +2 ⚡' }, `${crew.online}/${crew.total} в сети` + (crew.bonus ? ` +${crew.bonus}` : '')) : null;
     return h('div', { class: 'hud' },
       h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: swatchStyle(myT) }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
-      h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub)),
+      h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub), crewLine),
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
   function viewEl(L) {
@@ -583,9 +586,9 @@
       hot && !G.over ? h('button', { type: 'button', class: 'ev-hot', onclick: () => { G.view = 'map'; G.sel = hot.id; G.focus = hot.id; showGame(); } }, '🔥 Горячая точка: ', h('b', null, `${kindLabel(hot)} · ${L.regions[hot.region].name}`), ` — +10, ${hot.owner == null ? 'пока ничья' : 'держит ' + L.teams[hot.owner].name} ›`) : null)
       : h('div', { class: 'event' }, h('span', { class: 'ev-lbl' }, 'Скоро старт'), h('b', null, `Игра начнётся ${startText()}`), h('span', null, 'Вы уже в сети! Пока можно изучить карту, правила и разбор задач-боссов. Энергия начнёт копиться со старта.'));
     // яркая плашка-объявление под табло (скрывается крестиком, запоминается в браузере)
-    const NOTICE_K = 'zs_notice_0800';
+    const NOTICE_K = 'zs_notice_crew';
     const notice = G.over || store.get(NOTICE_K) ? null : h('div', { class: 'notice', role: 'status' },
-      h('p', null, h('b', null, 'Важно: '), 'новый игровой день и события теперь начинаются в 08:00 утра, а не в полночь. Ночью можно спокойно спать: копилка запишется утром.'),
+      h('p', null, h('b', null, 'Важно: '), 'энергия теперь копится до 10 ⚡. Командный заряд: если за час в игру зашли 25% вашей группы — всем +1 ⚡ в час, если 50% — +2 ⚡. Зовите своих!'),
       h('button', { type: 'button', class: 'nt-x', 'aria-label': 'Скрыть', onclick: (e) => { store.set(NOTICE_K, '1'); e.currentTarget.parentNode.remove(); } }, '×'));
     const bar = G.live ? null
       : h('div', { class: 'banner' }, h('span', null, G.over ? 'Демо · конец' : 'Демо'),
