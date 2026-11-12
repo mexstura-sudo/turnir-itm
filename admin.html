@@ -28,7 +28,7 @@ h1,h2{text-transform:uppercase;letter-spacing:.04em}
 .sheet{border:2px solid #8f8668!important;border-radius:10px!important;box-shadow:inset 2px 2px 0 #fffaf0,0 3px 0 rgba(0,0,0,.12)}
 .btn{border:2px solid #b44b0d;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18),0 2px 0 #b44b0d;text-transform:uppercase;letter-spacing:.06em}
 .btn.ghost{box-shadow:0 2px 0 #7d7660}
-.wrap{max-width:1100px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
 h1,h2{font-family:var(--font-display);font-weight:400;margin:0;text-wrap:balance}
 h1{font-size:1.6rem} h2{font-size:1.15rem}
 .eyebrow{font:600 .72rem/1 var(--font-body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
@@ -53,6 +53,10 @@ table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--cell);white-space:nowrap}
 td.num{text-align:right;font-family:var(--font-mono);white-space:nowrap}
+th.num{text-align:right}
+td.act{white-space:nowrap;width:1%}
+.fbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.fbar .cnt{margin-left:auto}
 tr.top td{background:var(--blue-soft)}
 .place{font:700 .85rem var(--font-mono)}
 .pill{display:inline-block;font:600 .72rem var(--font-body);padding:2px 7px;border-radius:999px;border:1px solid currentColor}
@@ -176,17 +180,38 @@ function tabs(){
 }
 
 function rank(rows, opts={}){
-  if (!rows.length) return h('p',{class:'muted'},'Пока нет результатов.');
+  if (!rows.length) return h('p',{class:'muted'}, opts.empty || 'Пока нет результатов.');
   return h('div',{class:'tbl'}, h('table',null,
-    h('thead',null, h('tr',null, h('th',null,'#'), h('th',null,'Участник'), opts.teacher?null:h('th',null,'Группа'), opts.spec?h('th',null,'Специальность'):null, h('th',null,'Баллы'), h('th',null,'Верно'), h('th',null,'Время'), h('th',null,'Задания'), opts.status?h('th',null,'Статус'):null, opts.manage?h('th',null,''):null)),
-    h('tbody',null, ...rows.map((r,i)=>h('tr',{class: !opts.status && i<3 ? 'top' : ''},
-      h('td',{class:'place'}, String(i+1)), h('td',null, r.name, suspicious(r.name) ? h('span',{class:'pill warn',title:'Похоже на кличку или ругательство — проверьте и переименуйте или удалите'},'проверьте') : null, DATA.similar && DATA.similar[r.id] ? h('span',{class:'pill twin',title:'В этой же группе: ' + DATA.similar[r.id].join(', ') + '. Возможно, один человек прошёл дважды — проверьте.'},'похожее имя') : null, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
+    h('thead',null, h('tr',null, h('th',null,'#'), h('th',null,'Участник'), opts.teacher?null:h('th',null,'Группа'), opts.spec?h('th',null,'Специальность'):null, h('th',{class:'num'},'Баллы'), h('th',{class:'num'},'Верно'), h('th',{class:'num'},'Время'), h('th',null,'Задания'), opts.status?h('th',null,'Статус'):null, opts.manage?h('th',null,''):null)),
+    h('tbody',null, ...rows.map((r,i)=>{ const pl = r._pl || i+1; return h('tr',{class: !opts.status && pl<=3 ? 'top' : ''},
+      h('td',{class:'place'}, String(pl)), h('td',null, r.name, suspicious(r.name) ? h('span',{class:'pill warn',title:'Похоже на кличку или ругательство — проверьте и переименуйте или удалите'},'проверьте') : null, DATA.similar && DATA.similar[r.id] ? h('span',{class:'pill twin',title:'В этой же группе: ' + DATA.similar[r.id].join(', ') + '. Возможно, один человек прошёл дважды — проверьте.'},'похожее имя') : null, h('div',{class:'small muted'}, fmtDate(r.finished_at||r.started_at))),
       opts.teacher?null:h('td',null,r.group), opts.spec?h('td',{class:'small'},specName(r.specialty)):null,
       h('td',{class:'num'},String(r.score)), h('td',{class:'num'},`${r.correct}/10`), h('td',{class:'num'},fmtMs(r.time_ms)),
       h('td',null, h('div',{class:'dots'}, ...(r.tasks||[]).map(t=>h('i',{class:t.ok===true?'ok':t.ok===false?'no':'',title:(TPL[t.tpl]||t.tpl)})))),
       opts.status?h('td',null,h('span',{class:'pill '+r.status}, r.status==='done'?'завершена':'идёт')):null,
-      opts.manage?h('td',null, manage(r)):null)))));
+      opts.manage?h('td',{class:'act'}, manage(r)):null); }))));
 }
+// ---------- поиск и фильтры на каждой вкладке (как в «Коды игры») ----------
+const FLT = {};   // состояние фильтров по вкладкам — сохраняется при «Обновить»
+const norm = (v) => String(v ?? '').toLowerCase().replace(/ё/g,'е');
+const hit = (t, ...f) => !t || norm(f.join(' ')).includes(t);
+const placed = (rows) => rows.map((r,i) => ({ ...r, _pl: i+1 }));
+const opts1 = (list, key, label) => [...new Map(list.map(r => [key(r), label ? label(r) : key(r)])).entries()].filter(([v]) => v != null && v !== '').sort((a,b) => String(a[1]).localeCompare(String(b[1]), 'ru', {numeric:true}));
+// key — вкладка; ph — подсказка поиска; selects — [{id, all, options:[[значение, подпись]]}];
+// draw(t, s) → { el, n, total }: t — строка поиска (нижний регистр, ё→е), s — выбранные значения фильтров
+function filtered(key, ph, selects, draw){
+  const st = FLT[key] = FLT[key] || { q:'', s:{} };
+  const box = h('div',{style:'display:flex;flex-direction:column;gap:14px;min-width:0'}), cnt = h('span',{class:'small muted cnt'});
+  const q = h('input',{type:'search',placeholder:ph,value:st.q,autocomplete:'off','aria-label':'Поиск',style:'flex:1 1 220px'});
+  const sels = selects.filter(x => x.options.length > 1).map(x => {
+    const el = h('select',{style:'flex:0 1 200px','aria-label':x.all}, h('option',{value:''},x.all), ...x.options.map(([v,l]) => h('option',{value:String(v),selected:String(st.s[x.id] ?? '') === String(v)}, String(l))));
+    el.addEventListener('change', () => { st.s[x.id] = el.value; fill(); }); return el; });
+  const fill = () => { const r = draw(norm(st.q.trim()), st.s); box.replaceChildren(r.el); cnt.textContent = r.n == null ? '' : 'Показано: ' + r.n + (r.total != null && r.total !== r.n ? ' из ' + r.total : ''); };
+  q.addEventListener('input', () => { st.q = q.value; fill(); });
+  fill();
+  return h('div',{style:'display:flex;flex-direction:column;gap:12px;min-width:0'}, h('div',{class:'fbar noprint'}, q, ...sels, cnt), box);
+}
+const NONE = 'Никого не нашлось — измените поиск или фильтр.';
 
 // похожие имена в одной группе: та же фамилия и первая буква имени, одно имя — начало другого,
 // или отличаются на 1–2 буквы (опечатка). Помогает заметить, что человек прошёл олимпиаду дважды.
@@ -212,13 +237,13 @@ const nameErr = (e) => { const m = String(e && e.message || e); for (const k in 
 function manage(r){
   const box = h('div',{class:'confirm'});
   const small = 'padding:6px 10px;font-size:.8rem;min-height:34px';
-  const reset = () => box.replaceChildren(
+  const reset = () => { box.style.flexWrap = 'nowrap'; box.replaceChildren(
     h('button',{class:'btn ghost',style:small,onclick:()=>renameDlg(r)},'Изменить'),
-    h('button',{class:'btn danger',style:'min-height:34px',onclick:ask},'Удалить'));
-  const ask = () => box.replaceChildren(
+    h('button',{class:'btn danger',style:'min-height:34px',onclick:ask},'Удалить')); };
+  const ask = () => { box.style.flexWrap = 'wrap'; box.replaceChildren(
     h('span',{class:'small'},'Удалить «' + r.name + '»? Результат и игрок в игре исчезнут, участник сможет пройти заново.'),
     h('button',{class:'btn danger',style:'min-height:34px',onclick:async()=>{ try{ await rpc('t_admin_delete',{p_key:KEY,p_id:r.id}); load(); }catch(e){ box.replaceChildren(h('span',{class:'err small'},nameErr(e))); setTimeout(reset, 2500); } }},'Да, удалить'),
-    h('button',{class:'btn ghost',style:small,onclick:reset},'Отмена'));
+    h('button',{class:'btn ghost',style:small,onclick:reset},'Отмена')); };
   reset(); return box;
 }
 function renameDlg(r){
@@ -244,32 +269,64 @@ function renameDlg(r){
 
 function body(){
   const d = done();
-  if (TAB==='students') return rank(d.filter(r=>!r.teacher), {spec:true,manage:true});
-  if (TAB==='teachers') return rank(d.filter(r=>r.teacher), {teacher:true,manage:true});
+  const grpSel = (list) => ({ id:'g', all:'Все группы', options: opts1(list, r => r.group) });
+  const specSel = (list) => ({ id:'sp', all:'Все специальности', options: opts1(list, r => r.specialty, r => specName(r.specialty)) });
+  if (TAB==='students') {
+    const all = placed(d.filter(r=>!r.teacher));
+    return filtered('students', 'Фамилия, имя или группа', [grpSel(all), specSel(all)], (t, s) => {
+      const l = all.filter(r => (!s.g || r.group === s.g) && (!s.sp || r.specialty === s.sp) && hit(t, r.name, r.group));
+      return { el: rank(l, {spec:true,manage:true,empty:NONE}), n:l.length, total:all.length }; });
+  }
+  if (TAB==='teachers') {
+    const all = placed(d.filter(r=>r.teacher));
+    return filtered('teachers', 'Фамилия или имя', [], (t) => {
+      const l = all.filter(r => hit(t, r.name));
+      return { el: rank(l, {teacher:true,manage:true,empty:NONE}), n:l.length, total:all.length }; });
+  }
   if (TAB==='codes') return codesView(d);
   if (TAB==='game') return gameView();
-  if (TAB==='all') return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Здесь и незавершённые попытки. Неуместное имя можно исправить («Изменить») или удалить участника — тогда он сможет пройти заново.'), rank(DATA.rows, {spec:true,status:true,manage:true}));
+  if (TAB==='all') {
+    const all = placed(DATA.rows);
+    return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Здесь и незавершённые попытки. Неуместное имя можно исправить («Изменить») или удалить участника — тогда он сможет пройти заново.'),
+      filtered('all', 'Фамилия, имя или группа', [grpSel(all.filter(r=>!r.teacher)), specSel(all), { id:'st', all:'Любой статус', options:[['done','Завершена'],['active','Идёт']] }], (t, s) => {
+        const l = all.filter(r => (!s.g || r.group === s.g) && (!s.sp || r.specialty === s.sp) && (!s.st || r.status === s.st) && hit(t, r.name, r.group));
+        return { el: rank(l, {spec:true,status:true,manage:true,empty:NONE}), n:l.length, total:all.length }; }));
+  }
   if (TAB==='specs') {
     const st = d.filter(r=>!r.teacher);
     const codes = DATA.specialties.map(s=>s.code).filter(c=>c!=='teacher');
-    return h('div',{style:'display:flex;flex-direction:column;gap:18px'}, ...codes.map(c=>{ const rows = st.filter(r=>r.specialty===c); return h('div',{class:'spec-block'}, h('h2',null, specName(c), h('span',{class:'muted small',style:'font-family:var(--font-body)'},' · '+rows.length+' уч.')), rank(rows.slice(0,10))); }));
+    return filtered('specs', 'Фамилия, имя или группа', [{ id:'sp', all:'Все специальности', options: codes.map(c => [c, specName(c)]) }, grpSel(st)], (t, s) => {
+      let n = 0;
+      const blocks = codes.filter(c => !s.sp || c === s.sp).map(c => {
+        const rows = placed(st.filter(r=>r.specialty===c));
+        // без поиска и фильтра группы — первая десятка; с ними — все совпадения со своим местом в специальности
+        const l = t || s.g ? rows.filter(r => (!s.g || r.group === s.g) && hit(t, r.name, r.group)) : rows.slice(0,10);
+        if ((t || s.g) && !l.length) return null; n += l.length;
+        return h('div',{class:'spec-block'}, h('h2',null, specName(c), h('span',{class:'muted small',style:'font-family:var(--font-body)'},' · '+rows.length+' уч.')), rank(l)); }).filter(Boolean);
+      return { el: blocks.length ? h('div',{style:'display:flex;flex-direction:column;gap:18px'}, ...blocks) : h('p',{class:'muted'},NONE), n: t || s.g ? n : null }; });
   }
   if (TAB==='groups') {
     const st = d.filter(r=>!r.teacher);
-    const rows = (DATA.groups||[]).map(g => { const rs = st.filter(r=>r.group===g.name); return { g, n: rs.length, avg: rs.length ? Math.round(rs.reduce((a,r)=>a+r.score,0)/rs.length) : 0, best: rs[0] }; }).sort((a,b)=> b.n - a.n || b.avg - a.avg);
-    return h('div',{class:'tbl'}, h('p',{class:'small muted'},'Сколько человек из каждой группы прошли турнир — удобно напоминать кураторам.'), h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'Группа'),h('th',null,'Курс'),h('th',null,'Прошли'),h('th',null,'Средний балл'),h('th',null,'Лучший'))),
-      h('tbody',null, ...rows.map(x=>h('tr',null, h('td',null,x.g.name), h('td',{class:'num'},String(x.g.course)), h('td',{class:'num'},String(x.n)), h('td',{class:'num'}, x.n?String(x.avg):'—'), h('td',null, x.best ? x.best.name + ' · ' + x.best.score : '—'))))));
+    const all = (DATA.groups||[]).map(g => { const rs = st.filter(r=>r.group===g.name); return { g, n: rs.length, avg: rs.length ? Math.round(rs.reduce((a,r)=>a+r.score,0)/rs.length) : 0, best: rs[0] }; }).sort((a,b)=> b.n - a.n || b.avg - a.avg);
+    return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Сколько человек из каждой группы прошли турнир — удобно напоминать кураторам.'),
+      filtered('groups', 'Группа или лучший участник', [{ id:'c', all:'Все курсы', options: opts1(all, x => x.g.course, x => x.g.course + ' курс') }, { id:'z', all:'Все группы', options:[['1','Кто-то прошёл'],['0','Никто не прошёл']] }], (t, s) => {
+        const l = all.filter(x => (!s.c || String(x.g.course) === s.c) && (!s.z || (s.z === '1' ? x.n > 0 : x.n === 0)) && hit(t, x.g.name, x.best && x.best.name));
+        return { n:l.length, total:all.length, el: l.length ? h('div',{class:'tbl'}, h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Группа'),h('th',{class:'num'},'Курс'),h('th',{class:'num'},'Прошли'),h('th',{class:'num'},'Средний балл'),h('th',null,'Лучший'))),
+          h('tbody',null, ...l.map(x=>h('tr',null, h('td',null,x.g.name), h('td',{class:'num'},String(x.g.course)), h('td',{class:'num'},String(x.n)), h('td',{class:'num'}, x.n?String(x.avg):'—'), h('td',null, x.best ? x.best.name + ' · ' + x.best.score : '—')))))) : h('p',{class:'muted'},'Таких групп нет.') }; }));
   }
   if (TAB==='tasks') {
     const agg = {};
     d.forEach(r => (r.tasks||[]).forEach(t => { const a = agg[t.tpl] = agg[t.tpl] || { n:0, ok:0, pool:t.pool }; a.n++; if (t.ok) a.ok++; }));
-    const rows = Object.entries(agg).sort((a,b)=> (a[1].ok/a[1].n) - (b[1].ok/b[1].n));
-    if (!rows.length) return h('p',{class:'muted'},'Пока нет данных.');
-    const lvl = { easy:'⭐', medium:'⭐⭐', boss:'⭐⭐⭐' };
-    return h('div',{class:'tbl'}, h('p',{class:'small muted'},'Сверху — самые трудные задания. Помогает понять, какие темы повторить на занятиях.'), h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'Задание'),h('th',null,'Уровень'),h('th',null,'Выдано'),h('th',null,'Решили'),h('th',null,''))),
-      h('tbody',null, ...rows.map(([k,a])=>{ const p = Math.round(a.ok/a.n*100); return h('tr',null, h('td',null,TPL[k]||k), h('td',null,lvl[a.pool]), h('td',{class:'num'},String(a.n)), h('td',{class:'num'},p+'%'), h('td',null,h('div',{class:'bar'},h('i',{style:`width:${p}%`})))); }))));
+    const all = Object.entries(agg).sort((a,b)=> (a[1].ok/a[1].n) - (b[1].ok/b[1].n));
+    if (!all.length) return h('p',{class:'muted'},'Пока нет данных.');
+    const lvl = { easy:'⭐', medium:'⭐⭐', boss:'⭐⭐⭐' }, lvlName = { easy:'⭐ простые', medium:'⭐⭐ средние', boss:'⭐⭐⭐ сложные' };
+    return h('div',{style:'display:flex;flex-direction:column;gap:8px'}, h('p',{class:'small muted',style:'margin:0'},'Сверху — самые трудные задания. Помогает понять, какие темы повторить на занятиях.'),
+      filtered('tasks', 'Название задания', [{ id:'lv', all:'Все уровни', options: ['easy','medium','boss'].filter(k => all.some(([,a]) => a.pool === k)).map(k => [k, lvlName[k]]) }], (t, s) => {
+        const l = all.filter(([k,a]) => (!s.lv || a.pool === s.lv) && hit(t, TPL[k] || k));
+        return { n:l.length, total:all.length, el: l.length ? h('div',{class:'tbl'}, h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Задание'),h('th',null,'Уровень'),h('th',{class:'num'},'Выдано'),h('th',{class:'num'},'Решили'),h('th',null,''))),
+          h('tbody',null, ...l.map(([k,a])=>{ const p = Math.round(a.ok/a.n*100); return h('tr',null, h('td',null,TPL[k]||k), h('td',null,lvl[a.pool]), h('td',{class:'num'},String(a.n)), h('td',{class:'num'},p+'%'), h('td',null,h('div',{class:'bar'},h('i',{style:`width:${p}%`})))); })))) : h('p',{class:'muted'},'Таких заданий нет.') }; }));
   }
 }
 
@@ -350,7 +407,7 @@ function backupsView(){
     h('p',{class:'small muted',style:'margin:0'},'Во время игры копия поля делается сама каждые 4 часа (хранятся последние 60). В копии — владельцы узлов и щиты, двери, копилка, энергия и захваты игроков. Игроки, вошедшие позже копии, при восстановлении остаются.'),
     h('div',{class:'row'}, h('button',{class:'btn',type:'button',onclick:async(e)=>{ e.currentTarget.disabled = true; try { await rpc('g_admin_backup_now',{p_key:KEY}); show('Копия сделана.'); setTimeout(load, 400); } catch(err){ show(err.message, true); } }},'Сделать копию сейчас')),
     list.length ? h('div',{class:'tbl'}, h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'Когда'),h('th',null,'День'),h('th',null,'Как'),h('th',null,'Занято узлов'),h('th',null,'Игроков'),h('th',null,''))),
+      h('thead',null,h('tr',null,h('th',null,'Когда'),h('th',null,'День'),h('th',null,'Как'),h('th',{class:'num'},'Занято узлов'),h('th',{class:'num'},'Игроков'),h('th',null,''))),
       h('tbody',null, ...list.map(row)))) : h('p',{class:'muted small',style:'margin:0'},'Копий пока нет.'),
     msg);
 }
@@ -364,17 +421,24 @@ function gameView(){
       h('div',{class:'stat'}, h('span',null,'🏆 Лучшая группа студентов'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, bestGroup && tot(bestGroup) > 0 ? bestGroup.team : '—'), bestGroup && tot(bestGroup) > 0 ? h('span',null, tot(bestGroup) + ' очк. · ' + (st.indexOf(bestGroup) + 1) + '-е место в общем') : null),
       h('div',{class:'stat'}, h('span',null,'🎓 Преподаватели'), h('b',{style:'font-size:1.05rem;font-family:var(--font-body)'}, teach ? (st.indexOf(teach) + 1) + '-е место' : '—'), teach ? h('span',null, tot(teach) + ' очк.') : null)),
     h('p',{class:'small',style:'margin:0'}, h('b',null, gamePhase()), ' · игроков: ' + G.players + '. Каждый день в 08:00 счёт команды записывается в копилку; итог недели — копилка + счёт сегодняшнего дня.'),
-    h('div',{class:'tbl'}, h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',null,'Итог'),...[1,2,3,4,5].map(d=>h('th',{title:'День '+d},'Д'+d)),h('th',null,'Узлов'),h('th',null,'Игроков'))),
-      h('tbody',null, ...st.map((r,i)=>{ const days = r.days || [], today = G.settings.today || 0, total = r.total ?? r.score ?? 0, now = r.today ?? r.score ?? 0;
-        return h('tr',{class:i<3&&total>0?'top':''}, h('td',{class:'place'},String(i+1)), h('td',null,r.team), h('td',{class:'num'},h('b',null,String(total))),
-          ...[1,2,3,4,5].map(d => h('td',{class:'num small'+(d===today?'':' muted')}, (d < today ? String(days[d-1] ?? 0) : d === today ? String(now) + ' ·' : '—') + (d === 4 && r.bounty ? ' +' + r.bounty + ' 🎯' : ''))),
-          h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players))); })))),
-    h('p',{class:'small muted',style:'margin:0'},'Д1–Д5 — счёт, записанный за каждый день; «·» — сегодняшний день, счёт ещё меняется; 🎯 — награда за голову лидеров в четверг (уже в копилке).'),
-    h('div',{class:'tbl'}, h('h2',null,'Лучшие взломщики'), top.length ? h('table',null,
-      h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Игрок'),h('th',null,'Команда'),h('th',null,'Захватов'))),
-      h('tbody',null, ...top.map((r,i)=>h('tr',null, h('td',{class:'place'},String(i+1)), h('td',null,r.name), h('td',null,r.team), h('td',{class:'num'},String(r.captures))))))
-      : h('p',{class:'muted small'},'Пока никто ничего не захватил.')));
+    filtered('game', 'Команда или игрок', [{ id:'k', all:'Все команды', options:[['s','Группы студентов'],['t','Преподаватели'],['on','Есть узлы на поле']] }], (t, s) => {
+      const okTeam = (r) => (!s.k || (s.k === 's' ? !r.teacher : s.k === 't' ? !!r.teacher : r.nodes > 0));
+      const l = st.map((r,i) => ({ r, pl:i+1 })).filter(({r}) => okTeam(r) && hit(t, r.team));
+      const teamOf = Object.fromEntries(st.map(r => [r.team, r]));
+      const tl = top.map((r,i) => ({ r, pl:i+1 })).filter(({r}) => (!teamOf[r.team] || okTeam(teamOf[r.team])) && hit(t, r.name, r.team));
+      const today = G.settings.today || 0;
+      return { n:l.length, total:st.length, el: h('div',{style:'display:flex;flex-direction:column;gap:14px'},
+        l.length ? h('div',{class:'tbl'}, h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',{class:'num'},'Итог'),...[1,2,3,4,5].map(d=>h('th',{class:'num',title:'День '+d},'Д'+d)),h('th',{class:'num'},'Узлов'),h('th',{class:'num'},'Игроков'))),
+          h('tbody',null, ...l.map(({r,pl})=>{ const days = r.days || [], total = r.total ?? r.score ?? 0, now = r.today ?? r.score ?? 0;
+            return h('tr',{class:pl<=3&&total>0?'top':''}, h('td',{class:'place'},String(pl)), h('td',null,r.team), h('td',{class:'num'},h('b',null,String(total))),
+              ...[1,2,3,4,5].map(d => h('td',{class:'num small'+(d===today?'':' muted')}, (d < today ? String(days[d-1] ?? 0) : d === today ? String(now) + ' ·' : '—') + (d === 4 && r.bounty ? ' +' + r.bounty + ' 🎯' : ''))),
+              h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players))); })))) : h('p',{class:'muted'},'Таких команд нет.'),
+        h('p',{class:'small muted',style:'margin:0'},'Д1–Д5 — счёт, записанный за каждый день; «·» — сегодняшний день, счёт ещё меняется; 🎯 — награда за голову лидеров в четверг (уже в копилке).'),
+        h('div',{class:'tbl'}, h('h2',null,'Лучшие взломщики'), tl.length ? h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Игрок'),h('th',null,'Команда'),h('th',{class:'num'},'Захватов'))),
+          h('tbody',null, ...tl.map(({r,pl})=>h('tr',null, h('td',{class:'place'},String(pl)), h('td',null,r.name), h('td',null,r.team), h('td',{class:'num'},String(r.captures))))))
+          : h('p',{class:'muted small'}, top.length ? 'Никого не нашлось.' : 'Пока никто ничего не захватил.'))) }; }));
 }
 
 // ---------- Коды входа в игру ----------
