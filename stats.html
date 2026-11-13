@@ -74,8 +74,8 @@ textarea{width:100%;min-height:90px;border:2px solid var(--line);border-radius:8
 .back{align-self:flex-start}
 /* навигатор по странице */
 .pnav{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:3px solid var(--panel-dark);padding:8px max(12px,env(safe-area-inset-left,0px))}
-.pnav-in{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.pnav a{min-width:0;white-space:normal;text-decoration:none;text-align:center;padding:8px 3px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:clamp(.7rem,3.1vw,.92rem);letter-spacing:.02em;line-height:1.1}
+.pnav-in{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.pnav a{min-width:0;white-space:normal;text-decoration:none;text-align:center;padding:8px 3px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:clamp(.62rem,2.7vw,.92rem);letter-spacing:.01em;line-height:1.1;hyphens:auto}
 .pnav a[aria-current="true"]{background:linear-gradient(#2b4a33,var(--lcd-bg));color:var(--lcd);border-color:#091209}
 section[id]{scroll-margin-top:76px}
 /* личная статистика */
@@ -98,15 +98,39 @@ section[id]{scroll-margin-top:76px}
 .me-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:.92rem}
 @media (max-width:560px){.me-two{grid-template-columns:1fr}}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+/* задания олимпиады */
+.tk-list{display:flex;flex-direction:column;gap:8px}
+.tk{border:2px solid var(--line);border-radius:10px;background:var(--paper);overflow:hidden}
+.tk[open]{border-color:var(--bevel-lo);box-shadow:0 3px 0 rgba(0,0,0,.1)}
+.tk>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 12px;min-height:56px}
+.tk>summary::-webkit-details-marker{display:none}
+.tk>summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.tk-name{font-weight:700;display:flex;gap:6px;align-items:baseline;min-width:0}
+.tk-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-name small{font-weight:500;color:var(--muted);white-space:nowrap}
+.tk-meta{font:600 .82rem var(--font-mono);text-align:right;white-space:nowrap}
+.tk-bar{grid-column:1/-1;height:8px;border-radius:4px;background:var(--cell);overflow:hidden}
+.tk-bar i{display:block;height:100%;border-radius:4px}
+.tk-body{padding:4px 12px 14px;display:flex;flex-direction:column;gap:12px;border-top:2px dashed var(--line)}
+.tk-kv{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:10px}
+.tk-kv div{background:var(--cell);border-radius:6px;padding:7px 4px;text-align:center}
+.tk-kv b{display:block;font:700 1.02rem var(--font-mono)}
+.tk-kv small{font-size:.68rem;color:var(--muted);line-height:1.2;display:block}
+.tk-ex{background:var(--sheet);border:2px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:12px;min-width:0;max-width:620px;width:100%}
+.tk-res{margin:0;font-weight:700}
+.tk-res.ok{color:var(--ok)}.tk-res.no{color:var(--bad)}
+@media (max-width:560px){.tk-kv{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:560px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.kv{grid-template-columns:repeat(3,minmax(0,1fr))}.fact{flex-basis:180px}}
 </style>
 </head>
 <body>
 <header class="masthead"><div class="masthead-in"><div class="lcd">Захват сети ИТМ · итоги</div></div></header>
-<nav class="pnav" aria-label="Разделы страницы"><div class="pnav-in"><a class="key" href="#results">Результаты</a><a class="key" href="#video">Видео</a><a class="key" href="#feedback">Обратная связь</a><a class="key" href="#me">Личная статистика</a></div></nav>
+<nav class="pnav" aria-label="Разделы страницы"><div class="pnav-in"><a class="key" href="#results">Результаты</a><a class="key" href="#tasks">Задания</a><a class="key" href="#video">Видео</a><a class="key" href="#feedback">Обратная связь</a><a class="key" href="#me">Личная статистика</a></div></nav>
 <main><div class="wrap stats" id="app"><p class="muted">Загружаем статистику…</p></div></main>
 <footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Иркутск · 2026</span></div></footer>
 <script src="config.js"></script>
+<script src="art.js?v=20261113b"></script>
+<script src="mechanics.js?v=20261113b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function () {
@@ -283,6 +307,50 @@ section[id]{scroll-margin-top:76px}
         g.first ? h('li', { class: 'muted' }, `Первый ход: ${t(g.first)} · последний: ${t(g.last)}`) : null));
   }
 
+  // ---------- задания олимпиады: статистика по видам и пример, который открывается отдельно ----------
+  const LV = { easy: ['⭐', 'простые', '#2f8a46'], medium: ['⭐⭐', 'по специальности', '#ec6a1c'], boss: ['⭐⭐⭐', 'боссы', '#b4282e'] };
+  let tkPool = '';
+  const mmss = (v) => { if (v == null) return '—'; const s = Math.round(v / 1000); return s >= 3600 ? `${Math.floor(s / 3600)} ч ${Math.floor(s % 3600 / 60)} мин` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  function example(t) {
+    const p = t.ex.payload, d = p.data || {}, type = p.type || t.ex.type, MECH = window.MECH;
+    if (!MECH || !MECH.RENDER[type]) return h('p', { class: 'muted', style: 'margin:0' }, p.text);
+    const R = MECH.RENDER[type](d), res = h('p', { class: 'tk-res', role: 'status' });
+    const btn = h('button', { class: 'btn', type: 'button', disabled: true, onclick: async () => {
+      if (!D.over || !sb) return; btn.disabled = true; btn.textContent = 'Проверяем…';
+      try { const r = await sb.rpc('g_task_try', { p_variant: t.ex.id, p_answer: R.value() }); if (r.error) throw r.error;
+        if (r.data.error) res.textContent = 'Проверка откроется после финала игры.'; else { res.className = 'tk-res ' + (r.data.correct ? 'ok' : 'no'); res.textContent = r.data.correct ? '✓ Верно!' : '✗ Неверно — попробуйте ещё раз.'; } }
+      catch (e) { res.className = 'tk-res no'; res.textContent = 'Не получилось проверить — нет связи.'; }
+      btn.disabled = false; btn.textContent = 'Проверить ответ'; } }, 'Проверить ответ');
+    R.onchange = () => { btn.disabled = !D.over || !R.ready(); res.textContent = ''; };
+    return h('div', { class: 'tk-ex' }, h('div', { class: 'tasktitle' }, p.title), h('div', { class: 'task-text' }, p.text),
+      typeof d.code === 'string' ? h('pre', { class: 'code' }, d.code) : null, d.table && type !== 'rows' ? MECH.table(d.table) : null, R.el,
+      D.over ? btn : h('p', { class: 'small muted', style: 'margin:0' }, '🔒 Проверка ответа откроется после финала игры в 20:00 — в «Захвате сети» встречаются те же задания.'), res);
+  }
+  function tasksSec() {
+    const T = D.tasks || [], S = D.tsum || {}, list = h('div', { class: 'tk-list' });
+    if (!T.length) return h('p', { class: 'muted' }, 'Статистика заданий пока недоступна.');
+    const fill = () => list.replaceChildren(...T.filter((t) => !tkPool || t.pool === tkPool).map((t) => {
+      const pc = Math.round(t.correct / Math.max(1, t.answered) * 100), lv = LV[t.pool] || LV.easy;
+      const el = h('details', { class: 'tk' }, h('summary', null,
+        h('span', { class: 'tk-name' }, h('span', null, t.ex.payload.title), h('small', null, lv[0])),
+        h('span', { class: 'tk-meta' }, `${pc}% · ${mmss(t.avg_ms)}`),
+        h('span', { class: 'tk-bar', role: 'img', 'aria-label': `верно ${pc}%` }, h('i', { style: `width:${pc}%;background:${lv[2]}` }))));
+      el.addEventListener('toggle', () => { if (!el.open || el.querySelector('.tk-body')) return;
+        el.append(h('div', { class: 'tk-body' },
+          h('div', { class: 'tk-kv' }, ...[[fmt(t.answered), 'раз решали'], [pc + '%', 'решили верно'], [mmss(t.avg_ms), 'типичное время верного ответа'], [mmss(t.fast_ms), 'рекорд скорости'], [t.variants, plural(t.variants, 'вариант', 'варианта', 'вариантов')]].map(([v, l]) => h('div', null, h('b', null, v), h('small', null, l)))),
+          t.spec ? h('p', { class: 'small muted', style: 'margin:0' }, 'Задание по специальности — его получали студенты своего направления.') : null,
+          h('p', { class: 'eyebrow', style: 'margin:0' }, 'Пример задания — попробуйте сами'), example(t))); });
+      return el; }));
+    const pools = h('div', { class: 'chips', role: 'group', 'aria-label': 'Уровень заданий' }, ...[['', 'Все'], ['easy', '⭐ Простые'], ['medium', '⭐⭐ По специальности'], ['boss', '⭐⭐⭐ Боссы']].map(([k, l]) =>
+      h('button', { type: 'button', class: 'chip', 'aria-pressed': String(tkPool === k), onclick: (e) => { tkPool = k; [...pools.children].forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); fill(); } }, l + ` (${k ? T.filter((t) => t.pool === k).length : T.length})`)));
+    fill();
+    const hard = T.slice().filter((t) => t.answered >= 20).sort((a, b) => a.correct / a.answered - b.correct / b.answered)[0];
+    return h('div', { style: 'display:flex;flex-direction:column;gap:12px' },
+      h('div', { class: 'tiles' }, ...[[fmt(S.answered || 0), 'ответов на задания'], [Math.round((S.correct || 0) / Math.max(1, S.answered || 0) * 100) + '%', 'верных ответов'], [mmss(S.avg_ms), 'типичное время на задание'], [fmt(S.perfect || 0), 'прошли без единой ошибки']].map(([v, l]) => h('div', { class: 'tile' }, h('b', null, v), h('small', null, l)))),
+      hard ? h('p', { class: 'small', style: 'margin:0' }, '🧠 Самое трудное задание: ', h('b', null, hard.ex.payload.title), ` — верно решили ${Math.round(hard.correct / hard.answered * 100)}%`) : null,
+      pools, list, h('p', { class: 'small muted', style: 'margin:0' }, 'Процент — сколько ответов верные; время — медиана: половина участников справилась быстрее. Нажмите на задание, чтобы открыть статистику и пример.'));
+  }
+
   function draw(keep) {
     const y = window.scrollY, f = D.facts, win = D.teams[0];
     $app.replaceChildren(
@@ -291,6 +359,7 @@ section[id]{scroll-margin-top:76px}
       h('section', { class: 'sheet screws', id: 'results' },
         h('div', { class: 'sec-h' }, h('h2', null, 'Динамика захватов'), h('p', { class: 'small muted' }, 'Сколько узлов группа захватила и отбила с начала игры. Выберите группу — ниже появится вся её игра за пять дней.')),
         chart(), chips(), teamCard()),
+      h('section', { class: 'sheet screws', id: 'tasks' }, h('div', { class: 'sec-h' }, h('h2', null, 'Задания олимпиады'), h('p', { class: 'small muted' }, `${(D.tasks || []).length} видов заданий: как их решали и сколько времени тратили.`)), tasksSec()),
       h('section', { class: 'sheet screws' }, h('div', { class: 'sec-h' }, h('h2', null, 'Игра в цифрах'), h('p', { class: 'small muted' }, 'Листайте ленту →')), facts()),
       h('section', { class: 'sheet screws', id: 'video' }, h('div', { class: 'sec-h' }, h('h2', null, 'Повторы дней'), h('p', { class: 'small muted' }, 'Каждый игровой день за 44 секунды.')), tv()),
       feedback(),
