@@ -457,7 +457,7 @@
   function applyLive(st, first) {
     const L = G.L, me = G.me, now = Date.parse(st.now);
     G.skew = now - Date.now(); G.startsAt = Date.parse(st.starts_at); G.endsAt = Date.parse(st.ends_at);
-    const prevDay = G.day; G.day = st.day; G.over = now >= G.endsAt; G.clock = irkMin(now);
+    const prevDay = G.day, wasOver = G.over; G.day = st.day; G.over = now >= G.endsAt; G.clock = irkMin(now);
     Object.assign(me, { energy: st.me.energy, captures: st.me.captures, team: st.me.team, name: st.me.name });
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
     st.nodes.forEach(([id, owner, shield, inf]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; n.infected = !!inf && owner == null; } });
@@ -471,7 +471,7 @@
     (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (G.seen.has(id)) return; G.seen.add(id); G.logId = Math.max(G.logId, id); const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
     L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     G.ver = st.ver;
-    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== evSig(G.surge, G.virus, G.fin), fresh: first ? [] : fresh };
+    return { overChanged: !first && wasOver !== G.over, dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== evSig(G.surge, G.virus, G.fin), fresh: first ? [] : fresh };
   }
   let polling = false, visHooked = false;
   function startPoll() {
@@ -488,6 +488,7 @@
       const st = await rpc('g_state', { p_code: G.code, p_ver: Math.max(0, G.ver - 40), p_log: Math.max(0, G.logId - 30) });
       if (st && st.error) { if (st.error !== 'TOO_MANY') location.reload(); return; } // поле перезалили или код пропал — войти заново
       const r = applyLive(st, false);
+      if (r.overChanged) { G.sel = null; G.view = 'map'; document.querySelectorAll('.modal').forEach((m) => m.remove()); showGame(); window.scrollTo(0, 0); return; }
       if (r.dayChanged) { G.sel = null; showGame(); maybeBrief(); return; }
       if (r.surgeChanged) { showGame(); return; }
       const hud = document.querySelector('.hud'); if (hud) hud.replaceWith(buildHud());
@@ -623,8 +624,8 @@
           h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
           h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : (G.clock < DAY_MIN ? 0 : 1440) - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
-    $app.append(...[buildHud(), notice, event, bar, tabs, surgeEl(), viewEl(L)].filter(Boolean));
-    if ((G.day >= LAST_DAY || G.over) && G.view === 'map') $app.append(finalView(L));
+    $app.append(...[buildHud(), G.over ? endView(L) : null, notice, G.over ? null : event, bar, tabs, surgeEl(), viewEl(L)].filter(Boolean));
+    if (G.day >= LAST_DAY && !G.over && G.view === 'map') $app.append(finalView(L));
     // демо: соперники ходят, пока вы смотрите
     if (!reduce && !G.live) G.timer = setInterval(() => { if (document.hidden || G.over) return; const t = Math.floor(Math.random() * L.teams.length); if (t === me.team && Math.random() < 0.5) return; const e = botAction(G, L, t, botName(L, t)); if (e) liveUpdate(L, e); }, 6500);
   }
@@ -1251,6 +1252,21 @@
       h('div', { class: 'final-two' },
         h('p', { style: 'margin:0' }, '🏆 Лучшая группа студентов: ', h('b', null, best.t.name), ` — ${best.s} очк.`),
         teach ? h('p', { style: 'margin:0' }, '🎓 Преподаватели: ', h('b', null, (rows.indexOf(teach) + 1) + '-е место'), ` — ${teach.s} очк.`) : null));
+  }
+
+  // игра окончена: табло победителя над застывшим полем + переход к статистике и обратной связи
+  function endView(L) {
+    const rows = standings(L), win = rows[0], best = rows.find((r) => !r.t.teach), teach = rows.find((r) => r.t.teach);
+    const my = rows.findIndex((r) => r.i === G.me.team), mine = rows[my], won = my === 0;
+    return h('section', { class: 'endgame screws', role: 'status' },
+      h('div', { class: 'eg-lcd' }, h('small', null, 'Сеть отключена · ' + finalText(0)), h('b', null, 'Игра окончена')),
+      h('div', { class: 'eg-win' }, h('span', { class: 'eg-cup', 'aria-hidden': 'true' }, '🏆'), h('small', null, 'Победитель турнира'),
+        h('b', { class: 'eg-name' }, h('span', { class: 'swatch', style: swatchStyle(win.t) }), win.t.name), h('span', { class: 'eg-pts' }, win.s + ' очков')),
+      h('div', { class: 'podium eg-pod' }, ...rows.slice(1, 3).map((r, i) => h('div', { class: 'pd' }, h('i', null, ['🥈', '🥉'][i]), h('b', null, r.t.name), h('span', null, r.s + ' очков')))),
+      h('p', { class: 'eg-me' + (won ? ' won' : '') }, won ? '🎉 Это ваша группа — поздравляем с победой!' : h('span', null, 'Ваша группа ', h('b', null, mine.t.name), ' — ', h('b', null, (my + 1) + '-е место'), `, ${mine.s} очков. Спасибо за игру!`)),
+      win.t.teach && best ? h('p', { class: 'eg-note' }, '🏆 Лучшая группа студентов: ', h('b', null, best.t.name), ` — ${best.s} очков`) : teach ? h('p', { class: 'eg-note' }, '🎓 Преподаватели: ', h('b', null, (rows.indexOf(teach) + 1) + '-е место'), ` — ${teach.s} очков`) : null,
+      h('a', { class: 'btn eg-btn', href: 'stats.html' }, 'Статистика игры и обратная связь →'),
+      h('p', { class: 'small eg-foot' }, 'Поле зафиксировано: карту, рейтинг и журнал можно посмотреть ниже.'));
   }
 
   function skip(mins) {

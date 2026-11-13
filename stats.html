@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" type="image/png" href="icon.png">
+<title>Захват сети ИТМ — статистика игры</title>
+<meta name="theme-color" content="#2f5a44">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Rubik:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css?v=20261113b">
+<style>
+/* Layout: одна колонка — график с выбором группы и её карточкой, табло с видео по дням, лента фактов, отзыв */
+main{padding:16px max(12px,env(safe-area-inset-left,0px)) 40px}
+.wrap.stats{max-width:1000px;gap:18px}
+.sec-h{display:flex;flex-direction:column;gap:2px}
+.sec-h h2{margin:0}
+.sec-h p{margin:0}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tile{background:var(--lcd-bg);color:#bfe8c6;border-radius:8px;padding:10px 8px;text-align:center;box-shadow:inset 0 0 0 2px #2b4a33}
+.tile b{display:block;font:600 clamp(1.3rem,5.5vw,2rem)/1.1 var(--font-display);color:var(--lcd);letter-spacing:.03em}
+.tile small{font:700 .68rem var(--font-body);letter-spacing:.1em;text-transform:uppercase}
+/* график */
+.chart{position:relative;background:var(--paper);border:2px solid var(--line);border-radius:8px;padding:6px 4px 2px;touch-action:pan-y}
+.chart svg{display:block;width:100%;height:auto;font-family:var(--font-mono)}
+.tip{position:absolute;top:8px;pointer-events:none;background:var(--lcd-bg);color:#dff3e2;border-radius:8px;padding:8px 10px;font:500 .78rem/1.35 var(--font-mono);box-shadow:0 3px 10px rgba(0,0,0,.3);min-width:150px;z-index:2}
+.tip b{display:block;color:var(--lcd);margin-bottom:4px}
+.tip div{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tip i{width:9px;height:9px;border-radius:50%;flex:none}
+.tip span:last-child{margin-left:auto;padding-left:10px;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font:500 .84rem var(--font-body);padding:6px 10px;border-radius:999px;border:2px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;min-height:36px}
+.chip i{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip.more{border-style:dashed;color:var(--muted)}
+/* карточка группы */
+.team{display:flex;flex-direction:column;gap:12px;border-top:2px dashed var(--line);padding-top:14px}
+.team-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.team-h i{width:20px;height:20px;border-radius:5px;box-shadow:0 0 0 2px var(--ink)}
+.team-h b{font:600 1.6rem/1 var(--font-display);letter-spacing:.04em}
+.team-h span{color:var(--muted)}
+.kv{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.kv div{background:var(--cell);border-radius:6px;padding:8px 4px;text-align:center}
+.kv b{display:block;font:700 1.15rem var(--font-mono)}
+.kv small{font-size:.7rem;color:var(--muted);line-height:1.2;display:block}
+.tbl-x{overflow-x:auto;max-width:100%;min-width:0}
+.wrap.stats>*,.sheet,.team{min-width:0}
+.days{width:100%;border-collapse:collapse;font:500 .84rem var(--font-mono);font-variant-numeric:tabular-nums;min-width:520px}
+.days th{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;text-align:right;padding:6px 6px;border-bottom:2px solid var(--ink);color:var(--muted)}
+.days th:first-child,.days td:first-child{text-align:left;white-space:nowrap}
+.days td{text-align:right;padding:7px 6px;border-bottom:1px solid var(--grid)}
+.days tfoot td{font-weight:700;border-top:2px solid var(--ink);border-bottom:0}
+.notes{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+/* табло с видео */
+.tv{background:linear-gradient(#45433a,#33312a);border:2px solid #1c1b17;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px}
+.tv video,.tv .tv-off{width:100%;aspect-ratio:16/9;border-radius:6px;background:#050a07;display:block;box-shadow:inset 0 0 0 3px #091209}
+.tv .tv-off{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--lcd);font:600 1.1rem var(--font-display);letter-spacing:.06em;text-transform:uppercase;padding:16px}
+.tv-keys{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.tv-keys .key{padding:10px 2px;min-height:44px;cursor:pointer;font-size:clamp(.72rem,3.2vw,.92rem);letter-spacing:.02em;white-space:nowrap}
+.tv-cap{color:#d9d2bd;font-size:.86rem;margin:0;text-align:center}
+/* лента фактов */
+.ribbon{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;padding:4px 2px 12px;margin:0 -2px;-webkit-overflow-scrolling:touch}
+.fact{flex:0 0 210px;scroll-snap-align:start;background:var(--paper);border:2px solid var(--bevel-lo);border-radius:10px;box-shadow:inset 2px 2px 0 var(--bevel-hi),0 3px 0 rgba(0,0,0,.12);padding:14px 12px;display:flex;flex-direction:column;gap:4px}
+.fact:nth-child(3n+1){background:var(--lcd-bg);border-color:#091209;box-shadow:inset 0 0 0 2px #2b4a33;color:#bfe8c6}
+.fact:nth-child(3n+1) b{color:var(--lcd)}
+.fact .ico{font-size:1.7rem;line-height:1}
+.fact b{font:600 2rem/1.05 var(--font-display);letter-spacing:.02em}
+.fact span{font-size:.86rem;line-height:1.3}
+.fact small{font-size:.74rem;opacity:.75;line-height:1.3}
+/* отзыв */
+.stars{display:flex;gap:4px}
+.stars button{font-size:2rem;line-height:1;background:none;border:0;padding:4px;cursor:pointer;filter:grayscale(1);opacity:.4;min-width:44px;min-height:44px}
+.stars button.on{filter:none;opacity:1}
+textarea{width:100%;min-height:90px;border:2px solid var(--line);border-radius:8px;padding:10px;font:inherit;background:var(--paper);color:var(--ink);resize:vertical}
+.back{align-self:flex-start}
+/* навигатор по странице */
+.pnav{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:3px solid var(--panel-dark);padding:8px max(12px,env(safe-area-inset-left,0px))}
+.pnav-in{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pnav a{min-width:0;white-space:normal;text-decoration:none;text-align:center;padding:8px 3px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:clamp(.7rem,3.1vw,.92rem);letter-spacing:.02em;line-height:1.1}
+.pnav a[aria-current="true"]{background:linear-gradient(#2b4a33,var(--lcd-bg));color:var(--lcd);border-color:#091209}
+section[id]{scroll-margin-top:76px}
+/* личная статистика */
+.me-form{display:flex;gap:8px;flex-wrap:wrap}
+.me-form input{flex:1 1 220px;min-height:48px;border:2px solid var(--line);border-radius:8px;padding:10px 12px;font:600 1.05rem var(--font-mono);letter-spacing:.06em;text-transform:uppercase;background:var(--paper);color:var(--ink)}
+.me-card{display:flex;flex-direction:column;gap:12px}
+.me-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.me-h b{font:600 1.5rem/1.1 var(--font-display);letter-spacing:.03em}
+.me-h span{color:var(--muted)}
+.me-h i{width:18px;height:18px;border-radius:5px;box-shadow:0 0 0 2px var(--ink)}
+.me-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.me-box{background:var(--lcd-bg);color:#bfe8c6;border-radius:10px;padding:12px;box-shadow:inset 0 0 0 2px #2b4a33;display:flex;flex-direction:column;gap:6px}
+.me-box h3{margin:0;font:700 .74rem var(--font-body);letter-spacing:.14em;text-transform:uppercase;color:#8fbf99}
+.me-big{font:600 2.2rem/1 var(--font-display);color:var(--lcd)}
+.me-box p{margin:0;font-size:.88rem}
+.bars{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;align-items:end;height:120px;padding-top:6px}
+.bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;height:100%;font:600 .78rem var(--font-mono)}
+.bars i{display:block;width:70%;max-width:46px;border-radius:4px 4px 0 0;background:var(--accent);min-height:2px}
+.bars small{font:600 .72rem var(--font-body);color:var(--muted)}
+.me-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:.92rem}
+@media (max-width:560px){.me-two{grid-template-columns:1fr}}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (max-width:560px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.kv{grid-template-columns:repeat(3,minmax(0,1fr))}.fact{flex-basis:180px}}
+</style>
+</head>
+<body>
+<header class="masthead"><div class="masthead-in"><div class="lcd">Захват сети ИТМ · итоги</div></div></header>
+<nav class="pnav" aria-label="Разделы страницы"><div class="pnav-in"><a class="key" href="#results">Результаты</a><a class="key" href="#video">Видео</a><a class="key" href="#feedback">Обратная связь</a><a class="key" href="#me">Личная статистика</a></div></nav>
+<main><div class="wrap stats" id="app"><p class="muted">Загружаем статистику…</p></div></main>
+<footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Иркутск · 2026</span></div></footer>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  'use strict';
+  const CFG = window.TOURNEY_CONFIG || {}, LIVE = !!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase);
+  const sb = LIVE ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, { auth: { persistSession: false } }) : null;
+  const $app = document.getElementById('app');
+  const code = (() => { try { return localStorage.getItem('zs_code'); } catch (e) { return null; } })();
+  const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная 1', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская', 'Серверная 2', 'Серверная 3', 'Серверная 4'];
+  const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'], DATES = ['9.11', '10.11', '11.11', '12.11', '13.11'];
+  const VIDEOS = { 1: 'Запуск сети', 2: 'Блэкаут в серверных', 3: 'Ремонт: двери переставили', 4: 'Концерт: прожектор на лидеров' };   // день 5 — после финала
+  const DAY5 = 'Финальный штурм';
+  const NS = 'http://www.w3.org/2000/svg';
+  function h(tag, attrs, ...kids) { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (v == null || v === false) continue; if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (k === 'class') e.className = v; else e.setAttribute(k, v === true ? '' : v); } kids.flat().forEach((c) => { if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c))); }); return e; }
+  function sv(tag, attrs, ...kids) { const e = document.createElementNS(NS, tag); for (const k in attrs || {}) if (attrs[k] != null) e.setAttribute(k, attrs[k]); kids.forEach((c) => e.append(c.nodeType ? c : document.createTextNode(String(c)))); return e; }
+  const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const plural = (n, a, b, c) => { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
+  const hourLabel = (hr) => { const d = Math.floor(hr / 24), c = (8 + hr) % 24, dd = Math.floor((8 + hr) / 24); return `${WD[Math.min(4, dd)] || ''} ${DATES[Math.min(4, dd)] || ''} · ${String(c).padStart(2, '0')}:00`; };
+
+  let D = null, sel = null, showAll = false;
+
+  // ---------- график: накопленные захваты (свободные узлы + отбитые у соперников) ----------
+  function chart() {
+    const T = D.teams, H = Math.round((Date.parse(D.end) - Date.parse(D.start)) / 3600e3), nowH = Math.min(H, Math.floor((Date.parse(D.at) - Date.parse(D.start)) / 3600e3));
+    T.forEach((t) => { if (t.cum) return; const a = new Array(H + 1).fill(0); t.caps.forEach(([hr, n]) => { if (hr >= 0 && hr <= H) a[hr] += n; }); let s = 0; t.cum = a.map((v) => (s += v)); t.sum = s; });
+    const top = T.slice().sort((a, b) => b.sum - a.sum).slice(0, 5).map((t) => t.id);
+    const seen = {}; T.slice().sort((a, b) => b.sum - a.sum).forEach((t) => { t.dash = seen[t.color] ? '6 4' : null; seen[t.color] = 1; });
+    const nar = window.innerWidth < 640, W = nar ? 560 : 960, Ht = nar ? 460 : 420, FS = nar ? 15 : 12.5, m = { l: nar ? 50 : 44, r: nar ? 128 : 96, t: 30, b: 30 }, max = Math.max(10, ...T.map((t) => t.sum));
+    const step = max > 1500 ? 500 : max > 600 ? 200 : max > 250 ? 100 : 50, top_y = Math.ceil(max / step) * step;
+    const X = (hr) => m.l + (W - m.l - m.r) * hr / H, Y = (v) => Ht - m.b - (Ht - m.t - m.b) * v / top_y;
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${Ht}`, role: 'img', 'aria-label': 'Накопленные захваты узлов по группам за пять дней' });
+    for (let v = 0; v <= top_y; v += step) { svg.append(sv('line', { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: '#d8ccaa', 'stroke-width': 1 }), sv('text', { x: m.l - 6, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': FS - .5, fill: '#6f6a55' }, fmt(v))); }
+    for (let d = 0; d * 24 <= H; d++) { svg.append(sv('line', { x1: X(d * 24), x2: X(d * 24), y1: m.t - 8, y2: Ht - m.b, stroke: '#b9ad86', 'stroke-width': 1, 'stroke-dasharray': d ? '3 4' : null })); if (d < 5) svg.append(sv('text', { x: X(d * 24) + 6, y: m.t - 10, 'font-size': FS, 'font-weight': 700, fill: '#2b2a22' }, nar ? WD[d] : `${WD[d]} ${DATES[d]}`)); }
+    const path = (t) => t.cum.slice(0, nowH + 1).map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+    const order = T.slice().sort((a, b) => (a.id === sel) - (b.id === sel) || top.includes(a.id) - top.includes(b.id));
+    order.forEach((t) => { const hi = t.id === sel, on = hi || (top.includes(t.id) && (sel == null || true));
+      svg.append(sv('path', { d: path(t), fill: 'none', stroke: on ? t.color : '#b7ae93', 'stroke-width': hi ? 4 : on ? 2 : 1, 'stroke-opacity': hi ? 1 : on ? (sel != null ? .55 : .95) : .55, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': on && !hi ? t.dash : null })); });
+    // подписи справа: выбранная группа и лидеры (не больше четырёх, без наложений)
+    const lab = T.filter((t) => t.id === sel || top.slice(0, 4).includes(t.id)).sort((a, b) => (b.id === sel) - (a.id === sel)).slice(0, 4).map((t) => ({ t, y: Y(t.cum[nowH]) })).sort((a, b) => a.y - b.y);
+    lab.forEach((l, i) => { if (i && l.y - lab[i - 1].y < FS + 3) l.y = lab[i - 1].y + FS + 3; });
+    lab.forEach(({ t, y }) => { svg.append(sv('circle', { cx: X(nowH), cy: Y(t.cum[nowH]), r: 4.5, fill: t.color, stroke: '#fbf6e6', 'stroke-width': 2 }), sv('text', { x: X(nowH) + 9, y: y + 4, 'font-size': FS, 'font-weight': t.id === sel ? 700 : 500, fill: '#2b2a22' }, `${t.name} ${fmt(t.cum[nowH])}`)); });
+    const cross = sv('line', { y1: m.t - 8, y2: Ht - m.b, stroke: '#2b2a22', 'stroke-width': 1, visibility: 'hidden' }); svg.append(cross);
+    const tip = h('div', { class: 'tip', hidden: true }), box = h('div', { class: 'chart' }, svg, tip);
+    const move = (ev) => { const r = svg.getBoundingClientRect(), px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left) / r.width * W;
+      const hr = Math.max(0, Math.min(nowH, Math.round((px - m.l) / (W - m.l - m.r) * H))); cross.setAttribute('x1', X(hr)); cross.setAttribute('x2', X(hr)); cross.setAttribute('visibility', 'visible');
+      const rows = T.filter((t) => t.cum[hr] > 0).sort((a, b) => b.cum[hr] - a.cum[hr]).slice(0, 6); const s = T.find((t) => t.id === sel); if (s && !rows.includes(s)) rows.push(s);
+      tip.replaceChildren(h('b', null, hourLabel(hr)), ...(rows.length ? rows.map((t) => h('div', { style: t.id === sel ? 'font-weight:700;color:#fff' : null }, h('i', { style: 'background:' + t.color }), h('span', null, t.name), h('span', null, fmt(t.cum[hr])))) : [h('div', null, 'ещё никто ничего не захватил')]));
+      tip.hidden = false; const left = X(hr) / W * r.width; tip.style.left = (left > r.width / 2 ? Math.max(4, left - tip.offsetWidth - 12) : Math.min(r.width - tip.offsetWidth - 4, left + 12)) + 'px'; };
+    const out = () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); };
+    svg.addEventListener('mousemove', move); svg.addEventListener('mouseleave', out); svg.addEventListener('touchstart', move, { passive: true }); svg.addEventListener('touchmove', move, { passive: true }); svg.addEventListener('touchend', () => setTimeout(out, 1800));
+    return box;
+  }
+  function chips() {
+    const T = D.teams, shown = showAll ? T : T.filter((t, i) => i < 10 || t.id === sel);
+    return h('div', { class: 'chips', role: 'group', 'aria-label': 'Выбор группы' }, ...shown.map((t) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(t.id === sel), onclick: () => { sel = t.id; draw(true); } }, h('i', { style: 'background:' + t.color }), t.name)),
+      T.length > 10 ? h('button', { type: 'button', class: 'chip more', onclick: () => { showAll = !showAll; draw(true); } }, showAll ? 'Свернуть' : `Ещё ${T.length - shown.length} ${plural(T.length - shown.length, 'группа', 'группы', 'групп')}`) : null);
+  }
+  // ---------- карточка группы: вся её игра за 5 дней ----------
+  function teamCard() {
+    const t = D.teams.find((x) => x.id === sel); if (!t) return null;
+    const place = D.teams.indexOf(t) + 1, name = (id) => (D.teams.find((x) => x.id === id) || {}).name || '—';
+    const sum = (k) => t.days.reduce((s, d) => s + (d[k] || 0), 0), moves = sum(2) + sum(3) + sum(4);
+    const cell = (v) => (v ? fmt(v) : '·');
+    const rows = t.days.map((d, i) => { const run = i + 1 === D.day && !D.over, future = i + 1 > D.day;
+      return h('tr', null, h('td', null, `${WD[i]} ${DATES[i]}`), h('td', null, future ? '—' : fmt(d[0] || 0) + (run ? ' ▸' : '')), h('td', null, d[1] ? '+' + d[1] : '·'), h('td', null, cell(d[2])), h('td', null, cell(d[3])), h('td', null, cell(d[4])), h('td', null, cell(d[5])), h('td', null, cell(d[6])), h('td', null, cell(d[7]))); });
+    return h('div', { class: 'team', id: 'team' },
+      h('div', { class: 'team-h' }, h('i', { style: 'background:' + t.color }), h('b', null, t.name), h('span', null, `${place}-е место · ${fmt(t.total)} ${plural(t.total, 'очко', 'очка', 'очков')} · ${t.players} ${t.teacher ? 'преп.' : plural(t.players, 'игрок', 'игрока', 'игроков')}`)),
+      h('div', { class: 'kv' }, ...[[fmt(t.total), 'очков всего'], [fmt(sum(2) + sum(3)), 'узлов захвачено и отбито'], [fmt(sum(4)), 'щитов поставлено'], [fmt(sum(6)), 'узлов отбили соперники'], [fmt(moves), 'ходов за игру']].map(([v, l]) => h('div', null, h('b', null, v), h('small', null, l)))),
+      h('div', { class: 'tbl-x' }, h('table', { class: 'days' },
+        h('thead', null, h('tr', null, ...['День', 'Очки', '🎯 Награда', 'Захваты', 'Атаки', 'Щиты', 'Игроков', 'Потеряно', '☣ Вирус'].map((x) => h('th', null, x)))),
+        h('tbody', null, ...rows),
+        h('tfoot', null, h('tr', null, h('td', null, 'Всего'), h('td', null, fmt(t.total - sum(1))), h('td', null, sum(1) ? '+' + sum(1) : '·'), h('td', null, cell(sum(2))), h('td', null, cell(sum(3))), h('td', null, cell(sum(4))), h('td', null, ''), h('td', null, cell(sum(6))), h('td', null, cell(sum(7))))))),
+      h('ul', { class: 'notes small' },
+        t.best && t.best.n ? h('li', null, '🥇 Лучший взломщик: ', h('b', null, t.best.who || 'игрок группы'), ` — ${t.best.n} ${plural(t.best.n, 'узел', 'узла', 'узлов')}`) : null,
+        t.foe ? h('li', null, '⚔ Чаще всего атаковали: ', h('b', null, name(t.foe.team)), ` — ${t.foe.n} ${plural(t.foe.n, 'раз', 'раза', 'раз')}`) : null,
+        t.hit ? h('li', null, '🛡 Больше всех досталось от: ', h('b', null, name(t.hit.team)), ` — ${t.hit.n} ${plural(t.hit.n, 'атака', 'атаки', 'атак')}`) : null,
+        h('li', { class: 'muted' }, 'Очки — счёт, записанный в копилку в 08:00 следующего дня' + (D.over ? '' : '; ▸ — сегодняшний счёт, он ещё меняется') + '. 🎯 — награда за головы лидеров.')));
+  }
+  // ---------- табло с повторами дней ----------
+  let vday = 1;
+  function tv() {
+    const scr = h('div'), cap = h('p', { class: 'tv-cap' });
+    const keys = h('div', { class: 'tv-keys', role: 'tablist', 'aria-label': 'День' }, ...[1, 2, 3, 4, 5].map((d) => h('button', { type: 'button', class: 'key', role: 'tab', 'aria-pressed': String(d === vday), onclick: () => { vday = d; show(); } }, d + ' день')));
+    function show() {
+      [...keys.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === vday)));
+      const t = VIDEOS[vday];
+      scr.replaceChildren(t ? h('video', { controls: true, playsinline: true, preload: 'none', poster: `video/day${vday}.jpg`, src: `video/day${vday}.mp4` }) : h('div', { class: 'tv-off' }, 'Повтор финального дня появится после 20:00'));
+      cap.textContent = `${WD[vday - 1]} ${DATES[vday - 1]} · ${t || DAY5}` + (t ? ' · 44 секунды, весь день на одной скорости' : '');
+    }
+    show();
+    return h('div', { class: 'tv' }, scr, keys, cap);
+  }
+  // ---------- лента фактов ----------
+  function facts() {
+    const f = D.facts, ms = (v) => { const s = Math.round(v / 1000); return s >= 3600 ? `${Math.floor(s / 3600)} ч ${Math.floor(s % 3600 / 60)} мин` : s >= 600 ? `${Math.round(s / 60)} мин` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+    const reg = (n) => (n ? REGIONS[n.region] || 'сеть' : ''), H = Math.round((Date.parse(D.end) - Date.parse(D.start)) / 3600e3);
+    const L = [
+      ['🎮', fmt(f.moves), `${plural(f.moves, 'ход', 'хода', 'ходов')} за игру`, `${fmt(f.players)} ${plural(f.players, 'игрок', 'игрока', 'игроков')} из ${f.groups} ${plural(f.groups, 'группы', 'групп', 'групп')}`],
+      ['🛡', fmt(f.shields), `${plural(f.shields, 'щит установлен', 'щита установлено', 'щитов установлено')}`, 'каждый второй ход — оборона'],
+      ['⚔', fmt(f.attacks), `${plural(f.attacks, 'успешная атака', 'успешные атаки', 'успешных атак')}`, `и ещё ${fmt(f.captures)} ${plural(f.captures, 'захват', 'захвата', 'захватов')} свободных узлов`],
+      f.fast ? ['⏱', ms(f.fast.time_ms), 'самая быстрая олимпиада', `${f.fast.who ? f.fast.who + ', ' : ''}${f.fast.grp} · ${f.fast.score} баллов`] : null,
+      ['📝', fmt(f.olymp), `${plural(f.olymp, 'человек прошёл', 'человека прошли', 'человек прошли')} олимпиаду`, f.olymp_avg_ms ? `в среднем за ${ms(f.olymp_avg_ms)}` : ''],
+      ['📱', fmt(f.screen_hours) + ' ч', 'экранного времени на всех', `это ${Math.round(f.screen_hours / 24)} суток без сна; рекорд одного игрока — ${f.screen_max} ч из ${H}`],
+      ['🌙', fmt(f.night), `${plural(f.night, 'ход', 'хода', 'ходов')} между полуночью и 06:00`, 'сон — для тех, у кого нет узлов'],
+      f.peak ? ['🔥', fmt(f.peak.n), 'ходов за один час', `час пик: ${hourLabel(f.peak.h)}, в игре ${f.peak.p} ${plural(f.peak.p, 'человек', 'человека', 'человек')}`] : null,
+      f.hot_node ? ['🏓', fmt(f.hot_node.n), 'раз менял хозяина один узел', `самый спорный узел сети — ${reg(f.hot_node)}`] : null,
+      f.fort_node ? ['🧱', fmt(f.fort_node.n), 'щита на одном узле за игру', `самая укреплённая точка — ${reg(f.fort_node)}`] : null,
+      f.pday ? ['🏋', fmt(f.pday.n), 'ходов одного игрока за день', `${f.pday.who ? f.pday.who + ' · ' : ''}${WD[f.pday.day - 1]} ${DATES[f.pday.day - 1]}`] : null,
+      ['☣', fmt(f.virus), `${plural(f.virus, 'узел заразил', 'узла заразил', 'узлов заразил')} вирус`, `и ${f.vshield} ${plural(f.vshield, 'раз', 'раза', 'раз')} щиты его отбили`],
+      ['🎯', fmt(f.bounty), 'очков роздано за головы лидеров', 'быть первым — дорогое удовольствие'],
+      ['⚡', '197', 'щитов сгорело за секунду', 'скачок напряжения в среду, 11:09'],
+      ['🚪', '33', 'двери заложили за одну ночь', 'и прорубили 28 новых — ремонт в среду'],
+      ['🎓', fmt(f.teacher_moves), `${plural(f.teacher_moves, 'ход', 'хода', 'ходов')} сделали преподаватели`, 'оценки за это не снижались'],
+    ].filter(Boolean);
+    return h('div', { class: 'ribbon', tabindex: '0', role: 'list', 'aria-label': 'Интересные факты об игре' }, ...L.map(([i, n, t, s]) => h('div', { class: 'fact', role: 'listitem' }, h('span', { class: 'ico', 'aria-hidden': 'true' }, i), h('b', null, n), h('span', null, t), s ? h('small', null, s) : null)));
+  }
+  // ---------- отзыв ----------
+  function feedback() {
+    let rating = 0; const liked = new Set(), msg = h('p', { class: 'small', role: 'status', style: 'margin:0' });
+    const stars = h('div', { class: 'stars', role: 'radiogroup', 'aria-label': 'Оценка игры' }, ...[1, 2, 3, 4, 5].map((n) => h('button', { type: 'button', role: 'radio', 'aria-label': n + ' из 5', onclick: () => { rating = n; [...stars.children].forEach((b, i) => { b.classList.toggle('on', i < n); b.setAttribute('aria-checked', String(i + 1 === n)); }); btn.disabled = false; } }, '⭐')));
+    const tags = h('div', { class: 'chips' }, ...['Карта и захват', 'Задачи', 'Мини-игры', 'События дня', 'Вирус', 'Играть командой', 'Видео-повторы'].map((x) => h('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', onclick: (e) => { const on = !liked.has(x); on ? liked.add(x) : liked.delete(x); e.currentTarget.setAttribute('aria-pressed', String(on)); } }, x)));
+    const note = h('textarea', { placeholder: 'Что добавить, убрать или починить к следующей игре?', maxlength: '1000', 'aria-label': 'Комментарий' });
+    const btn = h('button', { class: 'btn', type: 'button', disabled: true, onclick: async () => {
+      btn.disabled = true; btn.textContent = 'Отправляем…';
+      try { if (!sb) throw new Error('demo'); const r = await sb.rpc('g_feedback_send', { p_code: code, p_rating: rating, p_liked: [...liked], p_note: note.value }); if (r.error) throw r.error;
+        box.replaceChildren(h('h2', null, 'Спасибо!'), h('p', { style: 'margin:0' }, 'Отзыв получен. Он поможет сделать следующую игру лучше.')); }
+      catch (e) { msg.textContent = 'Не получилось отправить — проверьте связь и попробуйте ещё раз.'; btn.disabled = false; btn.textContent = 'Отправить отзыв'; } } }, 'Отправить отзыв');
+    const box = h('section', { class: 'sheet screws', id: 'feedback' }, h('div', { class: 'sec-h' }, h('h2', null, 'Обратная связь'), h('p', { class: 'small muted' }, 'Как вам игра? Отзыв увидит только организатор.')),
+      stars, h('p', { class: 'eyebrow', style: 'margin:0' }, 'Что понравилось'), tags, note, btn, msg);
+    return box;
+  }
+
+  // ---------- личная статистика по коду участника ----------
+  let myCode = code || '', myData = null;
+  function personal() {
+    const out = h('div', { class: 'me-card' }), err = h('p', { class: 'small', role: 'status', style: 'margin:0;color:var(--bad)' });
+    const inp = h('input', { type: 'text', inputmode: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'ИТМ-0000-0000', value: myCode, 'aria-label': 'Код участника' });
+    const go = h('button', { class: 'btn', type: 'button', onclick: () => ask(inp.value) }, 'Показать');
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(inp.value); });
+    async function ask(v) {
+      v = String(v || '').trim(); if (!v) { err.textContent = 'Введите код участника — он выдаётся после олимпиады.'; return; }
+      go.disabled = true; go.textContent = 'Ищем…'; err.textContent = '';
+      try { if (!sb) throw new Error('demo'); const r = await sb.rpc('g_my_stats', { p_code: v }); if (r.error) throw r.error;
+        if (r.data && r.data.error) { err.textContent = 'Такого кода нет. Проверьте буквы и цифры: код выглядит как ИТМ-0000-0000.'; }
+        else { myCode = v.toUpperCase(); myData = r.data; try { localStorage.setItem('zs_code', myCode); } catch (e) {} out.replaceChildren(card(myData)); } }
+      catch (e) { err.textContent = 'Не получилось загрузить — проверьте связь и попробуйте ещё раз.'; }
+      go.disabled = false; go.textContent = 'Показать';
+    }
+    if (myData) out.append(card(myData)); else if (myCode && sb) setTimeout(() => ask(myCode), 0);
+    return h('div', { style: 'display:flex;flex-direction:column;gap:12px' }, h('div', { class: 'me-form' }, inp, go), err, out);
+  }
+  function card(m) {
+    const ms = (v) => { const s = Math.round(v / 1000); return s >= 3600 ? `${Math.floor(s / 3600)} ч ${Math.floor(s % 3600 / 60)} мин` : `${Math.floor(s / 60)} мин ${s % 60} с`; };
+    const t = (iso) => { const d = new Date(iso); return d.toLocaleString('ru-RU', { timeZone: 'Asia/Irkutsk', weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+    const o = m.olymp, g = m.game;
+    const olymp = h('div', { class: 'me-box' }, h('h3', null, 'Олимпиада'), h('span', { class: 'me-big' }, `${o.place}-е`), h('p', null, `место из ${fmt(o.of)}`),
+      h('p', null, `${o.score} баллов · верно ${o.correct} из ${o.total}`), o.time_ms ? h('p', null, 'время: ' + ms(o.time_ms)) : null);
+    if (!m.played || !g) return h('div', { class: 'me-card' }, h('div', { class: 'me-h' }, h('b', null, m.name), h('span', null, m.group)), olymp, h('p', { class: 'muted', style: 'margin:0' }, 'В «Захват сети» вы не заходили — игровой статистики нет.'));
+    const caps = g.days.map((d) => d[0] + d[1]), max = Math.max(1, ...caps);
+    const game = h('div', { class: 'me-box' }, h('h3', null, 'Захват сети'), h('span', { class: 'me-big' }, fmt(g.captures + g.attacks)), h('p', null, `${plural(g.captures + g.attacks, 'узел захвачен', 'узла захвачено', 'узлов захвачено')} · ${g.rank}-е место среди ${fmt(g.of)} игроков`),
+      h('p', null, `${fmt(g.captures)} свободных · ${fmt(g.attacks)} отбито у соперников · ${fmt(g.shields)} ${plural(g.shields, 'щит', 'щита', 'щитов')}`));
+    const room = g.room != null ? REGIONS[g.room] : null;
+    return h('div', { class: 'me-card' },
+      h('div', { class: 'me-h' }, m.team ? h('i', { style: 'background:' + m.team.color }) : null, h('b', null, m.name), h('span', null, m.group + (g.team_place ? ` · группа на ${g.team_place}-м месте` : ''))),
+      h('div', { class: 'me-two' }, olymp, game),
+      h('div', null, h('p', { class: 'eyebrow', style: 'margin:0 0 4px' }, 'Захваты по дням'),
+        h('div', { class: 'bars', role: 'img', 'aria-label': 'Захваты по дням: ' + caps.map((c, i) => `${WD[i]} ${c}`).join(', ') }, ...caps.map((c, i) => h('div', null, h('span', null, c ? String(c) : ''), h('i', { style: `height:${Math.round(c / max * 80)}%;background:${m.team ? m.team.color : 'var(--accent)'}` }), h('small', null, WD[i]))))),
+      h('ul', { class: 'me-list' },
+        g.team_rank ? h('li', null, `🏅 В своей группе — ${g.team_rank}-е место по захватам из ${g.team_players}`) : null,
+        g.victim ? h('li', null, '⚔ Любимая цель: ', h('b', null, g.victim.name), ` — ${g.victim.n} ${plural(g.victim.n, 'атака', 'атаки', 'атак')}`) : null,
+        room ? h('li', null, '📍 Чаще всего играли в зоне ', h('b', null, room)) : null,
+        g.bounty ? h('li', null, `🎯 Награда за головы лидеров: +${g.bounty} ${plural(g.bounty, 'очко', 'очка', 'очков')} группе`) : null,
+        h('li', null, `⏱ В игре: ${g.hours} ${plural(g.hours, 'час', 'часа', 'часов')}` + (g.night ? ` · ${g.night} ${plural(g.night, 'ход', 'хода', 'ходов')} ночью` : '')),
+        g.first ? h('li', { class: 'muted' }, `Первый ход: ${t(g.first)} · последний: ${t(g.last)}`) : null));
+  }
+
+  function draw(keep) {
+    const y = window.scrollY, f = D.facts, win = D.teams[0];
+    $app.replaceChildren(
+      h('a', { class: 'key back', href: 'game.html', style: 'text-decoration:none;padding:10px 14px' }, '← К карте'),
+      h('div', { class: 'tiles' }, ...[[D.over ? win.name : `День ${D.day} из 5`, D.over ? 'победитель' : 'игра идёт'], [fmt(f.moves), 'ходов'], [fmt(f.players), 'игроков'], [f.groups, 'групп в игре']].map(([v, l]) => h('div', { class: 'tile' }, h('b', null, v), h('small', null, l)))),
+      h('section', { class: 'sheet screws', id: 'results' },
+        h('div', { class: 'sec-h' }, h('h2', null, 'Динамика захватов'), h('p', { class: 'small muted' }, 'Сколько узлов группа захватила и отбила с начала игры. Выберите группу — ниже появится вся её игра за пять дней.')),
+        chart(), chips(), teamCard()),
+      h('section', { class: 'sheet screws' }, h('div', { class: 'sec-h' }, h('h2', null, 'Игра в цифрах'), h('p', { class: 'small muted' }, 'Листайте ленту →')), facts()),
+      h('section', { class: 'sheet screws', id: 'video' }, h('div', { class: 'sec-h' }, h('h2', null, 'Повторы дней'), h('p', { class: 'small muted' }, 'Каждый игровой день за 44 секунды.')), tv()),
+      feedback(),
+      h('section', { class: 'sheet screws', id: 'me' }, h('div', { class: 'sec-h' }, h('h2', null, 'Личная статистика'), h('p', { class: 'small muted' }, 'Введите код участника — он выдаётся после олимпиады и открывает игру. Покажем ваше место в олимпиаде и всю вашу игру.')), personal()));
+    if (keep) window.scrollTo(0, y);
+  }
+  async function load() {
+    try {
+      let d;
+      if (sb) { const r = await sb.rpc('g_stats', { p_code: code }); if (r.error) throw r.error; d = r.data; }
+      else d = await (await fetch('stats-demo.json')).json();
+      D = d; sel = D.teams.length ? D.teams[0].id : null; draw();
+      if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
+      const links = [...document.querySelectorAll('.pnav a')], secs = links.map((a) => document.querySelector(a.getAttribute('href')));
+      const mark = () => { let k = 0; secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 140) k = i; }); if (innerHeight + scrollY >= document.body.scrollHeight - 4) k = secs.length - 1; links.forEach((a, i) => a.setAttribute('aria-current', String(i === k))); };
+      addEventListener('scroll', mark, { passive: true }); mark();
+    } catch (e) { $app.replaceChildren(h('section', { class: 'sheet' }, h('h2', null, 'Статистика пока недоступна'), h('p', { style: 'margin:0' }, 'Попробуйте обновить страницу чуть позже.'), h('a', { class: 'btn', href: 'game.html', style: 'text-decoration:none;text-align:center' }, 'К карте'))); }
+  }
+  load();
+})();
+</script>
+</body>
+</html>

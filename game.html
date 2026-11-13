@@ -11,7 +11,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#2f5a44">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Rubik:wght@400;500;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261113a">
+<link rel="stylesheet" href="style.css?v=20261113b">
 <style>
 /* Layout: игровой пульт — сверху табло игрока, под ним карта-граф сети техникума и панель выбранного узла */
 .wrap.game{max-width:760px}
@@ -225,6 +225,21 @@ details.event[open]>summary{margin-bottom:4px}
 @media (prefers-reduced-motion:reduce){.reach,.flash-n,.toast,.na-n,.my-edge,.mybase,.reticle,.bob,.map-sheet.open,.hotring{animation:none}
 details.event>summary::after{transition:none}}
 .st-name small.st-best{display:inline;color:#2f8a46;font-weight:700}
+.endgame{background:linear-gradient(#1b2a20,#0e1711);border:3px solid #091209;border-radius:14px;box-shadow:inset 0 0 0 2px #2b4a33,0 4px 0 rgba(0,0,0,.25);padding:18px 16px;display:flex;flex-direction:column;gap:14px;color:#dff3e2;text-align:center}
+.eg-lcd small{display:block;font:700 .72rem var(--font-body);letter-spacing:.14em;text-transform:uppercase;color:#8fbf99}
+.eg-lcd b{display:block;font:600 clamp(1.7rem,8vw,2.6rem)/1.1 var(--font-display);letter-spacing:.08em;text-transform:uppercase;color:var(--lcd);text-shadow:0 0 12px rgba(134,242,154,.6)}
+.eg-win{display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 12px;border-radius:12px;background:linear-gradient(#ffd75a,#f2a51c);color:#2a1a00;box-shadow:inset 0 2px 0 rgba(255,255,255,.5),0 0 28px rgba(255,200,60,.35)}
+.eg-cup{font-size:3rem;line-height:1}
+.eg-win small{font:700 .78rem var(--font-body);letter-spacing:.16em;text-transform:uppercase}
+.eg-name{display:flex;align-items:center;gap:10px;font:600 clamp(2rem,10vw,3.2rem)/1.05 var(--font-display);letter-spacing:.04em}
+.eg-pts{font:700 1.15rem var(--font-mono)}
+.eg-pod{grid-template-columns:repeat(2,minmax(0,1fr))!important;display:grid;gap:8px}
+.eg-pod .pd{min-height:0;border-radius:8px;background:rgba(134,242,154,.08);box-shadow:inset 0 0 0 1px #2b4a33}
+.eg-me{margin:0;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.07);color:#fff}
+.eg-me.won{background:linear-gradient(#3fae5c,#2f8a46);font-weight:700}
+.eg-note{margin:0;font-size:.9rem;color:#bfe8c6}
+.eg-btn{display:block;text-decoration:none;text-align:center}
+.eg-foot{margin:0;color:#8fbf99}
 .final-two{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:8px;background:rgba(47,138,70,.1)}
 /* утренние анимации событий дня (как в трейлере) */
 .fx-spark{opacity:0;transform-box:fill-box;transform-origin:center;animation:fxSpark .7s ease-out forwards}
@@ -278,13 +293,13 @@ details.event>summary::after{transition:none}}
 <footer class="foot"><div class="foot-in"><span>ИТМ им. Н. П. Трапезникова</span><span>Неделя турнира · 2026</span></div></footer>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="art.js?v=20261113a"></script>
-<script src="mechanics.js?v=20261113a"></script>
-<script src="demo-tasks.js?v=20261113a"></script>
-<script src="arcade.js?v=20261113a"></script>
+<script src="art.js?v=20261113b"></script>
+<script src="mechanics.js?v=20261113b"></script>
+<script src="demo-tasks.js?v=20261113b"></script>
+<script src="arcade.js?v=20261113b"></script>
 <script>
 document.querySelectorAll('[data-art]').forEach(n => { const seed = +n.dataset.seed || 1; n.replaceWith(n.dataset.art === 'card' ? ART.punchCard(seed) : ART.gears()); });
 </script>
-<script src="game.js?v=20261113a"></script>
+<script src="game.js?v=20261113b"></script>
 </body>
 </html>
