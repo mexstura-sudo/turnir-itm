@@ -432,10 +432,10 @@ function gameView(){
           h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Команда'),h('th',{class:'num'},'Итог'),...[1,2,3,4,5].map(d=>h('th',{class:'num',title:'День '+d},'Д'+d)),h('th',{class:'num'},'Узлов'),h('th',{class:'num'},'Игроков'),h('th',{class:'num',title:'Сумма энергии игроков команды; в скобках — сколько игроков на лимите'},'Энергия ⚡'))),
           h('tbody',null, ...l.map(({r,pl})=>{ const days = r.days || [], total = r.total ?? r.score ?? 0, now = r.today ?? r.score ?? 0;
             return h('tr',{class:pl<=3&&total>0?'top':''}, h('td',{class:'place'},String(pl)), h('td',null,r.team), h('td',{class:'num'},h('b',null,String(total))),
-              ...[1,2,3,4,5].map(d => h('td',{class:'num small'+(d===today?'':' muted')}, (d < today ? String(days[d-1] ?? 0) : d === today ? String(now) + ' ·' : '—') + (d === 4 && r.bounty ? ' +' + r.bounty + ' 🎯' : ''))),
+              ...[1,2,3,4,5].map(d => h('td',{class:'num small'+(d===today?'':' muted')}, (d < today ? String(days[d-1] ?? 0) : d === today ? String(now) + ' ·' : '—') + ((r.bounty_days || {})[d] ? ' +' + r.bounty_days[d] + ' 🎯' : ''))),
               h('td',{class:'num'},String(r.nodes)), h('td',{class:'num'},String(r.players)),
               h('td',{class:'num'}, r.energy == null ? '—' : h('span',null, h('b',null,String(r.energy)), h('span',{class:'muted small'},' ('+(r.at_cap||0)+')')))); })))) : h('p',{class:'muted'},'Таких команд нет.'),
-        h('p',{class:'small muted',style:'margin:0'},'Д1–Д5 — счёт, записанный за каждый день; «·» — сегодняшний день, счёт ещё меняется; 🎯 — награда за голову лидеров в четверг (уже в копилке). Энергия ⚡ — сколько сейчас у всех игроков команды вместе, в скобках — сколько игроков упёрлись в лимит.'),
+        h('p',{class:'small muted',style:'margin:0'},'Д1–Д5 — счёт, записанный за каждый день; «·» — сегодняшний день, счёт ещё меняется; 🎯 — награда за голову лидеров в четверг и в финале (уже в копилке). Энергия ⚡ — сколько сейчас у всех игроков команды вместе, в скобках — сколько игроков упёрлись в лимит.'),
         h('div',{class:'tbl'}, h('h2',null,'Лучшие взломщики'), tl.length ? h('table',null,
           h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'Игрок'),h('th',null,'Команда'),h('th',{class:'num'},'Захватов'))),
           h('tbody',null, ...tl.map(({r,pl})=>h('tr',null, h('td',{class:'place'},String(pl)), h('td',null,r.name), h('td',null,r.team), h('td',{class:'num'},String(r.captures))))))

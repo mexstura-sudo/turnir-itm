@@ -461,7 +461,8 @@
     Object.assign(me, { energy: st.me.energy, captures: st.me.captures, team: st.me.team, name: st.me.name });
     if (st.doors) setDoors(L, new Set(st.doors.map(([a, b]) => ekey(a, b))));
     st.nodes.forEach(([id, owner, shield, inf]) => { const n = L.nodes[id]; if (n) { n.owner = owner; n.shield = shield; n.infected = !!inf && owner == null; } });
-    const evSig = (x, v) => `${!!(x && x.done)}|${!!(v && v.started)}|${!!(v && v.ended)}`, surgeWas = evSig(G.surge, G.virus); G.surge = st.surge || null; G.virus = st.virus || null;
+    const evSig = (x, v, f) => `${!!(x && x.done)}|${!!(v && v.started)}|${!!(v && v.ended)}|${!!f}|${!!(f && f.started)}`, surgeWas = evSig(G.surge, G.virus, G.fin); G.surge = st.surge || null; G.virus = st.virus || null;
+    G.fin = st.fin || null; G.pool = G.fin && G.fin.started ? (st.pool || 0) : 0;   // финал: награда за голову и банк энергии группы
     L.hot = st.hot; L.leaders = st.leaders || []; G.crew = st.crew || null; G.eCap = st.e_cap || E_CAP;
     L.banked = {}; Object.entries(st.banked || {}).forEach(([t, v]) => { L.banked[t] = +v; }); L.yday = {}; Object.entries(st.yday || {}).forEach(([t, v]) => { L.yday[t] = +v; });
     L.teams.forEach((t, i) => { t.members = (st.members || {})[i] || 0; });
@@ -470,7 +471,7 @@
     (st.log || []).slice().reverse().forEach(([id, day, t, who, action, node, prev]) => { if (G.seen.has(id)) return; G.seen.add(id); G.logId = Math.max(G.logId, id); const e = { id, day, t, who, action, node, prev, me: t === me.team && who === me.name }; L.log.unshift(e); fresh.push(e); });
     L.log.sort((a, b) => b.id - a.id); if (L.log.length > 120) L.log.length = 120;
     G.ver = st.ver;
-    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== evSig(G.surge, G.virus), fresh: first ? [] : fresh };
+    return { dayChanged: prevDay != null && prevDay !== G.day, surgeChanged: !first && surgeWas !== evSig(G.surge, G.virus, G.fin), fresh: first ? [] : fresh };
   }
   let polling = false, visHooked = false;
   function startPoll() {
@@ -566,21 +567,22 @@
     // командный заряд: доля группы, зашедшей в игру в этот час, добавляет +1/+2 ⚡ к следующей порции (только в живой игре)
     const crew = G.live && G.crew && G.day && !G.over ? G.crew : null, cap = G.eCap || E_CAP;
     const enSub = G.over ? 'игра окончена' : !G.day ? 'до старта' : (me.energy >= cap ? 'запас полон' : `+${gainAt(nextH) + (crew ? crew.bonus : 0)} в ${hhmm(nextH * 60)}`);
+    const poolLine = G.live && G.pool > 0 && !G.over ? h('small', { class: 'hud-crew on', title: 'Общий банк энергии: когда ваша энергия закончилась, действие берёт её у товарищей по группе, которые сейчас не в игре' }, `+ банк ⚡ ${G.pool}`) : null;
     const crewLine = crew ? h('small', { class: 'hud-crew' + (crew.bonus ? ' on' : ''), title: 'Командный заряд: если за час в игру зашли 25% группы — +1 ⚡ всем, 50% — +2 ⚡' }, `${crew.online}/${crew.total} в сети` + (crew.bonus ? ` +${crew.bonus}` : '')) : null;
     return h('div', { class: 'hud' },
       h('div', { class: 'hud-who' }, h('span', { class: 'swatch', style: swatchStyle(myT) }), h('div', null, h('b', null, me.name), h('small', null, myT.name))),
-      h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub), crewLine),
+      h('div', { class: 'hud-en' + (happy ? ' happy' : ''), title: happy ? 'Счастливые часы: с 12:00 до 15:00 энергия приходит по +3 ⚡ в час' : 'Энергия' }, h('small', null, happy ? '☀ +3 в час' : 'Энергия'), h('b', null, '⚡ ' + me.energy), h('small', { class: 'hud-sub' }, enSub), poolLine, crewLine),
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
   // большой таймер над полем; что случится — сервер сообщает только после нуля
   function surgeEl() {
     clearInterval(G.surgeTm);
-    const vr = G.live && G.virus && !G.virus.ended ? G.virus : null;
-    const sg = vr ? { at: vr.at, done: vr.started, title: vr.title, text: vr.text, cls: 'virus' } : G.live ? G.surge : null; if (!sg || G.over) return null;
+    const vr = G.live && G.virus && !G.virus.ended ? G.virus : null, fn = G.live && G.fin ? G.fin : null;
+    const sg = fn ? { at: fn.at, done: fn.started, title: fn.title, text: fn.text, cls: 'fin' } : vr ? { at: vr.at, done: vr.started, title: vr.title, text: vr.text, cls: 'virus' } : G.live ? G.surge : null; if (!sg || G.over) return null;
     const at = Date.parse(sg.at), p2 = (x) => String(x).padStart(2, '0');
     if (sg.done) {
       const K = 'zs_surge_' + at; if (store.get(K)) return null;
-      return h('div', { class: 'surge-alert' + (sg.cls ? ' ' + sg.cls : ''), role: 'alert' }, h('b', null, (sg.cls ? '☣ ' : '⚡ ') + (sg.title || 'Событие')), h('p', null, sg.text || ''),
+      return h('div', { class: 'surge-alert' + (sg.cls ? ' ' + sg.cls : ''), role: 'alert' }, h('b', null, (sg.cls === 'virus' ? '☣ ' : sg.cls === 'fin' ? '🎯 ' : '⚡ ') + (sg.title || 'Событие')), h('p', null, sg.text || ''),
         h('button', { type: 'button', class: 'nt-x', 'aria-label': 'Скрыть', onclick: (e) => { store.set(K, '1'); e.currentTarget.parentNode.remove(); } }, '×'));
     }
     const lcd = h('div', { class: 'lcd' }); let asked = 0;
@@ -940,7 +942,7 @@
       const homeP = n.home != null ? profOf(L, n.home) : null;
       const homeTxt = (homeP ? ` Домашний узел ${L.teams[n.home].name}: задачи здесь по специальности «${PROF_NAME[homeP]}».` : '') + (reserved(n, team, evOf(G)) && !reach.has(n.id) ? ' Сегодня его может занять только эта группа.' : '');
       const why0 = n.kind === 'base' ? (own ? `База вашей ${grpWord()}. Отсюда растёт ваша сеть.` : (ownerT.teach ? 'База преподавателей. Захватить нельзя.' : 'Базу группы захватить нельзя.')) : own && !conn ? 'Узел отрезан от базы: не приносит очков. Восстановите связь через соседние узлы.' : own ? (n.shield >= 3 ? 'Узел укреплён до предела.' : 'Ваш узел. Укрепите его, чтобы атаковать было дороже.') : !reach.has(n.id) ? 'Далеко: сначала захватите узел рядом с ним.' : n.owner == null ? (n.infected ? 'Узел заражён вирусом ☣ — займите его, чтобы вылечить.' : 'Свободный узел рядом с вашей сетью.') : ownerT.teach ? 'Узел преподавателей на вашей границе.' : 'Узел соперника на вашей границе.';
-      const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + why0;
+      const why = G.over ? 'Турнир завершён — поле зафиксировано.' : !G.day ? `Игра начнётся ${startText()} — тогда узлы можно будет захватывать.` : (L.hot === n.id ? '🔥 Горячая точка дня: +10 очков, пока узел ваш. ' : '') + (n.owner != null && L.leaders.includes(n.owner) && !own ? 'Команда под прожектором — атака дешевле. ' : '') + (G.live && G.fin && G.fin.started && G.day === 5 && n.owner === G.fin.target && !own ? `🎯 Награда за голову: успешная атака — +${G.fin.pts} очка в копилку. ` : '') + why0;
       const kindName = { core: 'Ядро цеха', server: 'Сервер', base: ownerT && ownerT.teach ? 'База преподавателей' : 'База группы', node: 'Узел' }[n.kind];
       fillEl(sheet,
         h('button', { type: 'button', class: 'sh-x', 'aria-label': 'Закрыть', onclick: () => { G.sel = null; draw(); drawSheet(); } }, '×'),
@@ -951,10 +953,10 @@
         n.kind !== 'base' ? h('div', { class: 'sh-meta' }, h('span', null, 'Щиты'), h('span', { class: 'np-shields' }, ...Array.from({ length: 3 }, (_, i) => h('i', { class: i < n.shield ? 'on' : '' })))) : null,
         h('p', { class: 'sh-why' }, why + (G.day && !G.over ? homeTxt : '')),
         n.kind === 'base' ? h('button', { type: 'button', class: 'btn ghost roster-btn', onclick: () => showRoster(L, n.owner) }, ownerT.teach ? 'Состав команды' : 'Список группы', h('small', null, ` · ${ownerT.members || 0} игр.`)) : null,
-        acts.length ? h('div', { class: 'np-acts' }, ...acts.map((a) => { const c = cost(G, L, n, a); return h('button', { class: 'btn' + (a === 'fortify' ? ' ghost' : a === 'attack' ? ' btn-atk' : ''), type: 'button', disabled: me.energy < c, onclick: () => hack(L, n, a) },
+        acts.length ? h('div', { class: 'np-acts' }, ...acts.map((a) => { const c = cost(G, L, n, a); return h('button', { class: 'btn' + (a === 'fortify' ? ' ghost' : a === 'attack' ? ' btn-atk' : ''), type: 'button', disabled: me.energy + (G.pool || 0) < c, onclick: () => hack(L, n, a) },
           h('span', null, { capture: 'Захватить', attack: 'Атаковать', fortify: 'Укрепить щит' }[a]), h('small', null, c === 0 && a !== 'attack' ? ' 0 ⚡ · мини-игра' : ` ${c} ⚡ · задача ${tier(a)}`)); })) : null,
         acts.includes('attack') ? h('p', { class: 'small muted', style: 'margin:0' }, 'Начатую атаку отменить нельзя: ⚡ списывается сразу.') : null,
-        acts.length && acts.some((a) => me.energy < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, 'Не хватает энергии — каждый час приходит +2 ⚡.') : null);
+        acts.length && acts.some((a) => me.energy + (G.pool || 0) < cost(G, L, n, a)) ? h('p', { class: 'err', style: 'margin:0' }, G.fin && G.fin.started ? 'Не хватает энергии: ваша и банк группы на этот час исчерпаны — каждый час приходит +2 ⚡.' : 'Не хватает энергии — каждый час приходит +2 ⚡.') : null);
     }
 
     function playAnim() {
@@ -1134,7 +1136,8 @@
       back ? h('div', { class: 'row2' }, toMapBtn, h('button', { class: 'btn', type: 'button', onclick: () => { m.remove(); hack(L, n, 'attack'); } }, 'Вернуться к атаке')) : toMapBtn));
     go.onclick = async () => {
       const conn = connected(L, me.team), from = action === 'fortify' ? null : L.adj[n.id].find((u) => conn.has(u));
-      const bounty = action === 'attack' && G.day === 4 && L.leaders.includes(n.owner);   // четверг: атака на лидера — +2 в копилку
+      const finT = G.live && G.fin && G.fin.started && G.day === 5 ? G.fin.target : null;
+      const bounty = action === 'attack' && ((G.day === 4 && L.leaders.includes(n.owner)) || (finT != null && n.owner === finT)) ? (G.day === 4 ? 2 : G.fin.pts) : 0;   // атака на лидера — сразу в копилку
       let ok;
       if (G.live) {
         go.disabled = true; if (no) no.disabled = true; go.textContent = 'Проверяем…';
@@ -1151,8 +1154,8 @@
         if (action !== 'attack') me.energy -= c;
         if (ok) { const prev = apply(L, n, me.team, action, me.name); me.captures += action === 'fortify' ? 0 : 1; L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
       }
-      if (ok && bounty) { L.banked = L.banked || {}; L.banked[me.team] = (L.banked[me.team] || 0) + 2; }
-      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.` + (bounty ? ' Награда за голову лидера: +2 очка в копилку!' : ''));
+      if (ok && bounty) { L.banked = L.banked || {}; L.banked[me.team] = (L.banked[me.team] || 0) + bounty; }
+      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.` + (bounty ? ` Награда за голову лидера: +${bounty} очка в копилку!` : ''));
       else result('no', '✗', 'Взлом не удался', `Ответ неверный, потрачено ${c} ⚡. Попробуйте другой узел или задачу.`);
     };
     document.body.append(m);
@@ -1233,7 +1236,7 @@
     if (e.action === 'vshield') return `🛡 Щит ${tn} отразил вирус на ${nodeTitle(L, n)}`;
     if (e.action === 'fortify') return `${who} укрепил ${nodeTitle(L, n)}`;
     if (e.prev == null) return `${who} захватил ${nodeTitle(L, n)}`;
-    return `${who} отбил ${nodeTitle(L, n)} у ${teamName(L, e.prev)}` + (e.day === 4 && (L.leaders || []).includes(e.prev) ? ' · +2 за голову лидера' : '');
+    return `${who} отбил ${nodeTitle(L, n)} у ${teamName(L, e.prev)}` + (e.day === 4 && (L.leaders || []).includes(e.prev) ? ' · +2 за голову лидера' : e.day === 5 && G.fin && G.fin.started && e.prev === G.fin.target && e.id > (G.fin.log_from || 0) ? ` · +${G.fin.pts} за голову лидера` : '');
   }
   function logView(L) {
     return h('section', { class: 'sheet' }, h('h2', null, 'Журнал сети'),
