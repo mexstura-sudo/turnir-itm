@@ -141,7 +141,7 @@ section[id]{scroll-margin-top:76px}
   const code = (() => { try { return localStorage.getItem('zs_code'); } catch (e) { return null; } })();
   const REGIONS = ['Автомастерская', 'Сварочный цех', 'Серверная 1', 'Актовый зал', 'Швейный цех', 'Столовая', 'Учительская', 'Серверная 2', 'Серверная 3', 'Серверная 4'];
   const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'], DATES = ['9.11', '10.11', '11.11', '12.11', '13.11'];
-  const VIDEOS = { 1: 'Запуск сети', 2: 'Блэкаут в серверных', 3: 'Ремонт: двери переставили', 4: 'Концерт: прожектор на лидеров' };   // день 5 — после финала
+  const VIDEOS = { 1: 'Запуск сети', 2: 'Блэкаут в серверных', 3: 'Ремонт: двери переставили', 4: 'Концерт: прожектор на лидеров', 5: 'Финальный штурм' };
   const DAY5 = 'Финальный штурм';
   const NS = 'http://www.w3.org/2000/svg';
   function h(tag, attrs, ...kids) { const e = document.createElement(tag); for (const k in attrs || {}) { const v = attrs[k]; if (v == null || v === false) continue; if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (k === 'class') e.className = v; else e.setAttribute(k, v === true ? '' : v); } kids.flat().forEach((c) => { if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c))); }); return e; }
