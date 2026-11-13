@@ -576,10 +576,17 @@
       h('div', { class: 'hud-day' }, h('small', null, 'День'), h('b', null, (G.day || 0) + ' / ' + LAST_DAY), h('small', { class: 'hud-sub' }, daySub)));
   }
   // большой таймер над полем; что случится — сервер сообщает только после нуля
+  // таймер или плашка события; финал и вирус могут показываться вместе (вирус — первым)
   function surgeEl() {
     clearInterval(G.surgeTm);
-    const vr = G.live && G.virus && !G.virus.ended ? G.virus : null, fn = G.live && G.fin ? G.fin : null;
-    const sg = fn ? { at: fn.at, done: fn.started, title: fn.title, text: fn.text, cls: 'fin' } : vr ? { at: vr.at, done: vr.started, title: vr.title, text: vr.text, cls: 'virus' } : G.live ? G.surge : null; if (!sg || G.over) return null;
+    if (G.over || !G.live) return [];
+    const vr = G.virus && !G.virus.ended ? G.virus : null, fn = G.fin && G.fin.started ? G.fin : null;
+    const list = [vr ? { at: vr.at, done: vr.started, title: vr.title, text: vr.text, cls: 'virus' } : null, fn ? { at: fn.at, done: true, title: fn.title, text: fn.text, cls: 'fin' } : null].filter(Boolean);
+    if (!list.length && G.fin && !G.fin.started) list.push({ at: G.fin.at, done: false, cls: 'fin' });
+    if (!list.length && G.surge) list.push(G.surge);
+    return list.map(oneEvent).filter(Boolean);
+  }
+  function oneEvent(sg) {
     const at = Date.parse(sg.at), p2 = (x) => String(x).padStart(2, '0');
     if (sg.done) {
       const K = 'zs_surge_' + at; if (store.get(K)) return null;
@@ -624,7 +631,7 @@
           h('button', { type: 'button', disabled: G.over, title: 'Промотать 2 часа', onclick: () => skip(120) }, '⏩ +2 часа'),
           h('button', { type: 'button', disabled: G.over, title: G.day >= LAST_DAY ? 'К итогам' : 'Утро следующего дня', onclick: () => skip(G.day >= LAST_DAY ? END_MIN - G.clock : (G.clock < DAY_MIN ? 0 : 1440) - G.clock + 9 * 60) }, G.day >= LAST_DAY ? '⏭ Итоги' : '⏭ Утро'),
           h('button', { type: 'button', onclick: () => showLogin() }, 'Выйти')));
-    $app.append(...[buildHud(), G.over ? endView(L) : null, notice, G.over ? null : event, bar, tabs, surgeEl(), viewEl(L)].filter(Boolean));
+    $app.append(...[buildHud(), G.over ? endView(L) : null, notice, G.over ? null : event, bar, tabs, ...surgeEl(), viewEl(L)].filter(Boolean));
     if (G.day >= LAST_DAY && !G.over && G.view === 'map') $app.append(finalView(L));
     // демо: соперники ходят, пока вы смотрите
     if (!reduce && !G.live) G.timer = setInterval(() => { if (document.hidden || G.over) return; const t = Math.floor(Math.random() * L.teams.length); if (t === me.team && Math.random() < 0.5) return; const e = botAction(G, L, t, botName(L, t)); if (e) liveUpdate(L, e); }, 6500);
@@ -1155,8 +1162,9 @@
         if (action !== 'attack') me.energy -= c;
         if (ok) { const prev = apply(L, n, me.team, action, me.name); me.captures += action === 'fortify' ? 0 : 1; L.log.unshift({ day: G.day, t: me.team, who: me.name, action, node: n.id, prev, time: Date.now(), me: true }); G.anim = { node: n.id, from: from == null ? null : from, color: L.teams[me.team].color }; G.sel = n.id; }
       }
-      if (ok && bounty) { L.banked = L.banked || {}; L.banked[me.team] = (L.banked[me.team] || 0) + bounty; }
-      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.` + (bounty ? ` Награда за голову лидера: +${bounty} очка в копилку!` : ''));
+      const capB = ok && action !== 'fortify' && G.live && G.fin && G.fin.cap_pts && G.day === 5 ? G.fin.cap_pts : 0;   // финал: каждый захват — в копилку
+      if ((ok && bounty) || capB) { L.banked = L.banked || {}; L.banked[me.team] = (L.banked[me.team] || 0) + (ok ? bounty : 0) + capB; }
+      if (ok) result('ok', '✓', { capture: 'Узел захвачен!', attack: 'Узел отбит у соперника!', fortify: 'Щит установлен!' }[action], action === 'fortify' ? `Щитов на узле: ${n.shield}. Атаковать его теперь дороже.` : `${nodeTitle(L, n)} теперь принадлежит ${teamName(L, me.team)}.` + (bounty ? ` Награда за голову лидера: +${bounty} очка в копилку!` : '') + (capB ? ` +${capB} очко в копилку группы!` : ''));
       else result('no', '✗', 'Взлом не удался', `Ответ неверный, потрачено ${c} ⚡. Попробуйте другой узел или задачу.`);
     };
     document.body.append(m);
