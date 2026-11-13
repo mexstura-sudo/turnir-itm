@@ -140,8 +140,8 @@ function login(msg){
 
 async function load(){
   try {
-    const [res, codes, gst, bk] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({})), rpc('g_admin_state', { p_key: KEY }).catch(() => null), rpc('g_admin_backups', { p_key: KEY }).catch(() => null)]);
-    DATA = res; DATA.game = codes || {}; DATA.gstate = gst; DATA.backups = bk; DATA.similar = similarNames(res.rows || []); ls.set(LS, KEY); render();
+    const [res, codes, gst, bk, fb] = await Promise.all([rpc('t_admin_results', { p_key: KEY }), rpc('g_admin_codes', { p_key: KEY }).catch(() => ({})), rpc('g_admin_state', { p_key: KEY }).catch(() => null), rpc('g_admin_backups', { p_key: KEY }).catch(() => null), rpc('g_admin_feedback', { p_key: KEY }).catch(() => null)]);
+    DATA = res; DATA.game = codes || {}; DATA.gstate = gst; DATA.backups = bk; DATA.feedback = fb; DATA.similar = similarNames(res.rows || []); ls.set(LS, KEY); render();
   }
   catch(e){ login(/BAD_KEY/.test(e.message) ? 'Неверный ключ.' : 'Нет связи с сервером: ' + e.message); }
 }
@@ -175,7 +175,7 @@ function winners(students, teachers){
 }
 
 function tabs(){
-  const T = [['students','Студенты'],['teachers','Преподаватели'],['game','Игра'],['codes','Коды игры'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки']];
+  const T = [['students','Студенты'],['teachers','Преподаватели'],['game','Игра'],['codes','Коды игры'],['specs','По специальностям'],['groups','По группам'],['tasks','Статистика заданий'],['all','Все попытки'],['feedback','Отзывы' + (DATA.feedback && DATA.feedback.length ? ' · ' + DATA.feedback.length : '')]];
   return h('div',{class:'tabs',role:'tablist'}, ...T.map(([k,l])=>h('button',{role:'tab','aria-selected':String(TAB===k),onclick:()=>{TAB=k;render();}},l)));
 }
 
@@ -267,6 +267,31 @@ function renameDlg(r){
   document.body.append(m); inp.focus(); inp.select();
 }
 
+// ---------- отзывы со страницы итогов ----------
+function feedbackView(){
+  const all = DATA.feedback;
+  if (!all) return h('p',{class:'muted'},'Отзывы не загрузились — нажмите «Обновить».');
+  if (!all.length) return h('p',{class:'muted'},'Отзывов пока нет. Их оставляют на странице итогов (stats.html → «Обратная связь»).');
+  const avg = all.reduce((a,f)=>a+f.rating,0)/all.length, by = [5,4,3,2,1].map(n=>[n, all.filter(f=>f.rating===n).length]);
+  const tags = {}; all.forEach(f=>(f.liked||[]).forEach(t=>{ tags[t]=(tags[t]||0)+1; }));
+  const tagList = Object.entries(tags).sort((a,b)=>b[1]-a[1]), maxT = Math.max(1, ...tagList.map(x=>x[1]));
+  const stars = (n) => '★'.repeat(n) + '☆'.repeat(5-n);
+  const when = (iso) => new Date(iso).toLocaleString('ru-RU',{timeZone:'Asia/Irkutsk',day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+  return h('div',{style:'display:flex;flex-direction:column;gap:14px'},
+    h('div',{class:'stats'}, h('div',{class:'stat'},h('b',null,avg.toFixed(1).replace('.',',')),h('span',null,'средняя оценка')), h('div',{class:'stat'},h('b',null,String(all.length)),h('span',null,'отзывов')),
+      h('div',{class:'stat'},h('b',null,String(all.filter(f=>f.note).length)),h('span',null,'с комментарием')), h('div',{class:'stat'},h('b',null,String(all.filter(f=>!f.name).length)),h('span',null,'анонимных'))),
+    h('div',{class:'tbl'}, h('table',null, h('thead',null,h('tr',null,h('th',null,'Оценка'),h('th',{class:'num'},'Отзывов'),h('th',null,''))),
+      h('tbody',null, ...by.map(([n,c])=>h('tr',null,h('td',null,stars(n)),h('td',{class:'num'},String(c)),h('td',{style:'width:55%'},h('div',{class:'bar'},h('i',{style:`width:${Math.round(c/all.length*100)}%`})))))))),
+    tagList.length ? h('div',{class:'tbl'}, h('h2',null,'Что понравилось'), h('table',null, h('tbody',null, ...tagList.map(([t,c])=>h('tr',null,h('td',null,t),h('td',{class:'num'},String(c)),h('td',{style:'width:55%'},h('div',{class:'bar'},h('i',{style:`width:${Math.round(c/maxT*100)}%`})))))))) : null,
+    filtered('feedback', 'Текст отзыва, имя или группа', [{ id:'r', all:'Любая оценка', options:[5,4,3,2,1].map(n=>[String(n), stars(n)]) }, { id:'g', all:'Все группы', options: opts1(all.filter(f=>f.team), f=>f.team) }, { id:'c', all:'Все отзывы', options:[['1','С комментарием'],['0','Без комментария']] }], (t, sel) => {
+      const l = all.filter(f => (!sel.r || String(f.rating)===sel.r) && (!sel.g || f.team===sel.g) && (!sel.c || (sel.c==='1' ? !!f.note : !f.note)) && hit(t, f.note, f.name, f.team, (f.liked||[]).join(' ')));
+      return { n:l.length, total:all.length, el: l.length ? h('div',{class:'tbl'}, h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Когда'),h('th',null,'Оценка'),h('th',null,'Кто'),h('th',null,'Понравилось'),h('th',null,'Комментарий'))),
+        h('tbody',null, ...l.map(f=>h('tr',null, h('td',{class:'num small'},when(f.at)), h('td',{style:'white-space:nowrap;color:#c58b00'},stars(f.rating)),
+          h('td',null, f.name ? h('span',null,f.name, h('span',{class:'muted small'},' · '+(f.team||''))) : h('span',{class:'muted'},'аноним')),
+          h('td',{class:'small'}, (f.liked||[]).join(', ') || '—'), h('td',{style:'min-width:220px;white-space:pre-wrap'}, f.note || h('span',{class:'muted'},'—'))))))) : h('p',{class:'muted'},'Таких отзывов нет.') }; }));
+}
+
 function body(){
   const d = done();
   const grpSel = (list) => ({ id:'g', all:'Все группы', options: opts1(list, r => r.group) });
@@ -284,6 +309,7 @@ function body(){
       return { el: rank(l, {teacher:true,manage:true,empty:NONE}), n:l.length, total:all.length }; });
   }
   if (TAB==='codes') return codesView(d);
+  if (TAB==='feedback') return feedbackView();
   if (TAB==='game') return gameView();
   if (TAB==='all') {
     const all = placed(DATA.rows);
